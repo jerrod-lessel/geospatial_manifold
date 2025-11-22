@@ -7,7 +7,8 @@ An interactive web map for exploring hazard, health, and resilience data across 
 
 - Click anywhere to get a real-time hazard report
 - View your proximity to the nearest:
-  - 🔥 Fire hazard zones
+  - 🚒 Fire hazard zones
+  - 🔥 Active fires
   - 🌊 Flood zones
   - ☁️ Ozone Level
   - 🌫️ PM2.5 Concentation
