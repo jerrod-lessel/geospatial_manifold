@@ -12,8 +12,8 @@ An interactive web map for exploring hazard, health, and resilience data across 
   - ☁️ Ozone Level
   - 🌫️ PM2.5 Concentation
   - 🚰 Drinking Water Contaminant
-  - 🪨 Landslide susceptibility areas (visual only for now)
-  - 💥 Shaking Potential (visual only for now)
+  - 🪨 Landslide susceptibility areas
+  - 💥 Shaking Potential
 - Toggle legends and reset the view
 - Responsive design with performance optimization in mind
 
