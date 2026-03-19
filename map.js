@@ -108,7 +108,7 @@ const UI = {
 
 // OpenChargeMap config
 const OCM = {
-  API_KEY: "166f53f4-5ccd-4fae-92fe-e03a24423a7b",
+  API_KEY: "12cd0160-b34e-4ed4-8bd2-aca0d44c98d9",
   ATTRIBUTION: '<a href="https://openchargemap.org/site">OpenChargeMap</a>',
 };
 
