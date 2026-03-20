@@ -1,6 +1,6 @@
 /* ============================================================================
   map.js - Geospatial Manifold (Leaflet + Esri Leaflet)
-  VERSION: 2026-02-28.a
+  VERSION: 2026-03-19.a
 
   WHAT THIS FILE DOES:
   - Initializes the map + basemap options
@@ -50,6 +50,13 @@ const SERVICES = {
   FAULTS_REGIONAL_QUAT: "https://gis.conservation.ca.gov/server/rest/services/CGS/FaultActivityMapCA/MapServer/17",
   FAULTS_LOCAL_QUAT: "https://gis.conservation.ca.gov/server/rest/services/CGS/FaultActivityMapCA/MapServer/21",
 
+  // Basemap focus mask
+  USA_STATES_GENERALIZED:
+    "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_States_Generalized_Boundaries/FeatureServer/0",
+  
+  CA_BOUNDARY_DETAILED: 
+    "https://services.arcgis.com/ue9rwulIoeLEI9bj/arcgis/rest/services/US_StateBoundaries/FeatureServer/0",
+  
   // Fire Hazard Severity Zones
   FIRE_SRA:
     "https://socogis.sonomacounty.ca.gov/map/rest/services/CALFIREPublic/State_Responsibility_Area_Fire_Hazard_Severity_Zones/FeatureServer/0",
@@ -107,9 +114,9 @@ const UI = {
 };
 
 // OpenChargeMap config
-const OCM = {
-  API_KEY: "12cd0160-b34e-4ed4-8bd2-aca0d44c98d9",
-  ATTRIBUTION: '<a href="https://openchargemap.org/site">OpenChargeMap</a>',
+const NREL = {
+  API_KEY: "FB9tVCYIfh5V0h7TXeAnci6F5ee6QKX9AA1Rlq0P",
+  ATTRIBUTION: '<a href="https://afdc.energy.gov/stations/">NREL/AFDC</a>',
 };
 
 /* ============================================================================
@@ -175,6 +182,86 @@ function createBasemaps() {
   return { baseOSM, esriSat, cartoLight, cartoDark };
 }
 
+/**
+ * Adds a gray "focus mask" over the map with a hole for California.
+ * - Lightweight: queries a generalized state boundary once
+ * - No backend; works on GitHub Pages
+ * - Non-interactive so it won't block clicks
+ */
+function addCaliforniaFocusMask(map) {
+  try {
+    const maskPane = map.createPane("caMaskPane");
+    maskPane.style.zIndex = 260;
+    maskPane.style.pointerEvents = "none";
+
+    // Big outer ring (lat,lng)
+    const worldRing = [
+      [-90, -180],
+      [-90, 180],
+      [90, 180],
+      [90, -180],
+      [-90, -180],
+    ];
+
+    // Use a FeatureLayer query (you already rely on this pattern everywhere else)
+    const states = L.esri.featureLayer({
+      url: SERVICES.CA_BOUNDARY_DETAILED,
+    });
+
+    states
+      .query()
+      .where("NAME = 'California'")
+      .returnGeometry(true)
+      .run((err, fc) => {
+        if (err) {
+          console.warn("CA mask: query failed:", err);
+          return;
+        }
+        if (!fc || !fc.features || !fc.features.length) {
+          console.warn("CA mask: no CA feature returned");
+          return;
+        }
+
+        const caGeom = fc.features[0].geometry;
+        if (!caGeom) {
+          console.warn("CA mask: missing geometry");
+          return;
+        }
+
+        // GeoJSON coords are [lng,lat] -> Leaflet wants [lat,lng]
+        const toLatLngRing = (ringLngLat) => ringLngLat.map(([lng, lat]) => [lat, lng]);
+
+        const holes = [];
+
+        if (caGeom.type === "Polygon") {
+          // coordinates: [ring1, ring2, ...]
+          caGeom.coordinates.forEach((ring) => holes.push(toLatLngRing(ring)));
+        } else if (caGeom.type === "MultiPolygon") {
+          // coordinates: [ [ring1, ring2...], [ring1, ...], ... ]
+          caGeom.coordinates.forEach((poly) => {
+            poly.forEach((ring) => holes.push(toLatLngRing(ring)));
+          });
+        } else {
+          console.warn("CA mask: unexpected geometry type:", caGeom.type);
+          return;
+        }
+
+        const latLngRings = [worldRing, ...holes];
+
+        L.polygon(latLngRings, {
+          pane: "caMaskPane",
+          stroke: false,
+          fill: true,
+          fillColor: "#000",
+          fillOpacity: 0.45,
+          interactive: false,
+        }).addTo(map);
+      });
+  } catch (e) {
+    // If anything goes sideways, don't kill the app
+    console.warn("CA mask: failed to initialize:", e);
+  }
+}
 /* ============================================================================
   4) UI HELPERS (About + Spinner)
 ============================================================================ */
@@ -599,6 +686,10 @@ function createFaultsInteractiveLayer(map) {
   logOneFeatureOnce(regional, "regional");
   logOneFeatureOnce(local, "local");
 
+  // Expose layers for querying (distance + name) without changing the UI layer
+  group._regional = regional;
+  group._local = local;
+
   return group;
 }
 
@@ -919,66 +1010,90 @@ function createEvChargersLayer(map) {
     isLoading = true;
 
     const b = map.getBounds();
+    const sw = b.getSouthWest();
+    const ne = b.getNorthEast();
+
+    // NREL uses a bounding box differently - we give it a center point + radius
+    // So we calculate the center of the current map view
+    const centerLat = (sw.lat + ne.lat) / 2;
+    const centerLng = (sw.lng + ne.lng) / 2;
+
+    // Radius in miles - we use a generous number to fill the view
+    // 100 miles covers most zoom levels nicely
+    const radiusMiles = 100;
+
     const url =
-      `https://api.openchargemap.io/v3/poi/?output=json` +
-      `&boundingbox=(${b.getSouthWest().lat},${b.getSouthWest().lng}),(${b.getNorthEast().lat},${b.getNorthEast().lng})` +
-      `&maxresults=${UI.EV_MAX_RESULTS}` +
-      `&key=${OCM.API_KEY}`;
+      `https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json` +
+      `?api_key=${NREL.API_KEY}` +
+      `&fuel_type=ELEC` +
+      `&latitude=${centerLat}` +
+      `&longitude=${centerLng}` +
+      `&radius=${radiusMiles}` +
+      `&status=E` +
+      `&access=public` +
+      `&state=CA` +
+      `&limit=200`;
 
     fetch(url)
       .then((r) => r.json())
       .then((data) => {
         layer.clearLayers();
 
-        data.forEach((charger) => {
-          const ai = charger.AddressInfo || {};
-          if (!ai.Latitude || !ai.Longitude) return;
+        const stations = data.fuel_stations || [];
 
-          let totalPorts = 0;
-          (charger.Connections || []).forEach((c) => (totalPorts += c.Quantity || 1));
+        console.log("NREL stations received:", stations.length);
+        console.log("First station sample:", stations[0]);
 
-          const status = charger.StatusType?.Title ?? "Unknown Status";
-          const usage = charger.UsageType?.Title ?? "Usage details not specified";
-          const network = charger.OperatorInfo?.Title ?? "Unknown Network";
+        stations.forEach((station) => {
+          if (!station.latitude || !station.longitude) return;
 
-          let equipmentInfo = "<li>No equipment details</li>";
-          if (charger.Connections?.length) {
-            equipmentInfo = charger.Connections
-              .map(
-                (conn) => `
-                  <li>
-                    <strong>${conn.ConnectionType?.Title ?? "Connector"} (${conn.Quantity || 1})</strong>:
-                    <br> ${conn.PowerKW ?? "N/A"} kW
-                    <br> ${conn.Voltage ?? "N/A"} V
-                    <br> ${conn.Amps ?? "N/A"} A
-                    <br> (${conn.Level?.Title ?? "Level info unavailable"})
-                  </li>`
-              )
-              .join("");
-          }
+          // Charger level counts
+          const level1 = station.ev_level1_evse_num || 0;
+          const level2 = station.ev_level2_evse_num || 0;
+          const dcFast = station.ev_dc_fast_num || 0;
+          const totalPorts = level1 + level2 + dcFast;
 
-          const marker = L.marker([ai.Latitude, ai.Longitude], {
-            icon: L.divIcon({ html: "🔋", className: "evcharger-icon", iconSize: L.point(30, 30) }),
+          const network = station.ev_network || "Unknown Network";
+          const hours = station.access_days_time || "Hours not listed";
+          const connectors = station.ev_connector_types
+            ? station.ev_connector_types.join(", ")
+            : "Not listed";
+
+          const marker = L.marker([station.latitude, station.longitude], {
+            icon: L.divIcon({
+              html: "🔋",
+              className: "evcharger-icon",
+              iconSize: L.point(30, 30),
+            }),
           });
 
           const popupContent = `
             <div class="ev-popup">
-              <strong>${ai.Title || "EV Charger"}</strong><br><hr>
-              <strong>Status:</strong> ${status} (${usage})<br>
+              <strong>${station.station_name || "EV Charger"}</strong><br>
+              <hr>
+              <strong>Address:</strong> ${station.street_address || "N/A"}, ${station.city || ""}<br>
               <strong>Network:</strong> ${network}<br>
-              <strong>Total Charging Ports:</strong> ${totalPorts}<br><br>
-              <strong>Equipment Breakdown:</strong>
-              <ul>${equipmentInfo}</ul>
+              <strong>Hours:</strong> ${hours}<br>
+              <strong>Total Ports:</strong> ${totalPorts}<br>
+              <strong>Level 1:</strong> ${level1} ports<br>
+              <strong>Level 2:</strong> ${level2} ports<br>
+              <strong>DC Fast:</strong> ${dcFast} ports<br>
+              <strong>Connectors:</strong> ${connectors}<br>
             </div>
           `;
 
-          marker.bindPopup(popupContent, { maxHeight: UI.POPUP_MAX_HEIGHT, autoPan: true }).addTo(layer);
+          marker
+            .bindPopup(popupContent, {
+              maxHeight: UI.POPUP_MAX_HEIGHT,
+              autoPan: true,
+            })
+            .addTo(layer);
         });
 
         isLoading = false;
       })
       .catch((err) => {
-        console.error("OpenChargeMap error:", err);
+        console.error("NREL EV stations error:", err);
         isLoading = false;
       });
   }
@@ -990,14 +1105,14 @@ function createEvChargersLayer(map) {
 
     map.on("overlayadd", (e) => {
       if (e.layer === layer) {
-        map.attributionControl.addAttribution(OCM.ATTRIBUTION);
-        fetchInView(); // immediate fetch on enable
+        map.attributionControl.addAttribution(NREL.ATTRIBUTION);
+        fetchInView();
       }
     });
 
     map.on("overlayremove", (e) => {
       if (e.layer === layer) {
-        map.attributionControl.removeAttribution(OCM.ATTRIBUTION);
+        map.attributionControl.removeAttribution(NREL.ATTRIBUTION);
         layer.clearLayers();
       }
     });
@@ -1053,6 +1168,131 @@ function getClosestFeatureByEdgeDistance(layer, clickLatLng, label, fieldName, _
   });
 }
 
+function getDistanceToLineMiles(clickLatLng, feature) {
+  const pt = turf.point([clickLatLng.lng, clickLatLng.lat]);
+  const geom = feature?.geometry;
+
+  if (!geom) return NaN;
+
+  // Handle LineString
+  if (geom.type === "LineString") {
+    const line = turf.lineString(geom.coordinates);
+    const nearest = turf.nearestPointOnLine(line, pt, { units: "miles" });
+    return Number(nearest?.properties?.dist);
+  }
+
+  // Handle MultiLineString
+  if (geom.type === "MultiLineString") {
+    let best = Infinity;
+
+    for (const coords of geom.coordinates) {
+      const line = turf.lineString(coords);
+      const nearest = turf.nearestPointOnLine(line, pt, { units: "miles" });
+      const d = Number(nearest?.properties?.dist);
+      if (Number.isFinite(d) && d < best) best = d;
+    }
+
+    return best === Infinity ? NaN : best;
+  }
+
+  return NaN;
+}
+
+function findBestFaultName(props) {
+  if (!props) return null;
+
+  // Try common fault-name-ish fields first
+  const preferred = [
+    "FAULT_NAME",
+    "Fault_Name",
+    "fault_name",
+    "NAME",
+    "Name",
+    "FAULT",
+    "Fault",
+    "FAULTNAME",
+    "FaultName",
+  ];
+
+  for (const k of preferred) {
+    const v = props[k];
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+
+  // Fallback: pick the first decent-looking string value
+  for (const k of Object.keys(props)) {
+    const v = props[k];
+    if (typeof v === "string" && v.trim().length >= 3) return v.trim();
+  }
+
+  return null;
+}
+
+function queryFaultLayerNearby(faultFeatureLayer, latlng, meters) {
+  return new Promise((resolve) => {
+    if (!faultFeatureLayer?.query) return resolve({ err: "No query()", fc: null });
+
+    faultFeatureLayer
+      .query()
+      .nearby(latlng, meters)
+      .returnGeometry(true)
+      .outFields(["*"])
+      .run((err, fc) => resolve({ err, fc }));
+  });
+}
+
+/**
+ * Returns a formatted sidebar string like:
+ * ■ Nearest Fault: San Andreas Fault
+ * 📏 Distance: 1.25 mi
+ */
+async function getNearestFaultText(faultsGroupLayer, latlng) {
+  // Your group stores the real FeatureLayers here:
+  const regional = faultsGroupLayer?._regional;
+  const local = faultsGroupLayer?._local;
+
+  if (!regional || !local) {
+    // This happens if createFaultsInteractiveLayer didn’t attach them (or changed)
+    return "❌ <strong>Nearest Fault:</strong> Fault query layers not available.";
+  }
+
+  const meters = UI.NEARBY_METERS;
+
+  // Query BOTH layers; whichever has the closer line wins.
+  const [r1, r2] = await Promise.all([
+    queryFaultLayerNearby(regional, latlng, meters),
+    queryFaultLayerNearby(local, latlng, meters),
+  ]);
+
+  const features = [
+    ...(r1.fc?.features || []),
+    ...(r2.fc?.features || []),
+  ];
+
+  if (!features.length) {
+    return `❌ <strong>Nearest Fault:</strong> No faults found within ${(meters / 1609.34).toFixed(0)} miles.`;
+  }
+
+  let best = null;
+
+  for (const f of features) {
+    const d = getDistanceToLineMiles(latlng, f); // your function (Turf nearestPointOnLine)
+    if (!Number.isFinite(d)) continue;
+
+    if (!best || d < best.dist) {
+      best = {
+        dist: d,
+        name: findBestFaultName(f.properties) || "Unnamed / Unknown",
+      };
+    }
+  }
+
+  if (!best) {
+    return "❌ <strong>Nearest Fault:</strong> Could not calculate distance.";
+  }
+
+  return `■ <strong>Nearest Fault:</strong> ${best.name}<br>📏 Distance: ${best.dist.toFixed(2)} mi`;
+}
 /* ============================================================================
   8) ZOOM VISIBILITY HELPERS
 ============================================================================ */
@@ -1068,6 +1308,49 @@ function toggleAtZoom(map, layer, minZoom) {
       if (map.hasLayer(layer)) map.removeLayer(layer);
     }
   });
+}
+
+/**
+ * Zoom-gate a layer WITHOUT overriding user toggles.
+ * - User intent is tracked via overlayadd/overlayremove on the *gated layer*.
+ * - The map only shows the inner layer when:
+ *      (user wants it ON) && (zoom >= minZoom)
+ *
+ * Returns a LayerGroup you should register in LAYERS + LAYER_TOGGLES instead of the raw layer.
+ */
+function makeZoomGatedLayer(map, innerLayer, minZoom) {
+  const gate = L.layerGroup();
+  let intendedOn = false; // user toggle intent
+
+  function sync() {
+    const shouldShow = intendedOn && map.getZoom() >= minZoom;
+
+    if (shouldShow) {
+      if (!gate.hasLayer(innerLayer)) gate.addLayer(innerLayer);
+    } else {
+      if (gate.hasLayer(innerLayer)) gate.removeLayer(innerLayer);
+    }
+  }
+
+  // When user toggles the gate layer via L.control.layers
+  map.on("overlayadd", (e) => {
+    if (e.layer === gate) {
+      intendedOn = true;
+      sync();
+    }
+  });
+
+  map.on("overlayremove", (e) => {
+    if (e.layer === gate) {
+      intendedOn = false;
+      // remove inner layer immediately to avoid “ghost on”
+      if (gate.hasLayer(innerLayer)) gate.removeLayer(innerLayer);
+    }
+  });
+
+  map.on("zoomend", sync);
+
+  return gate;
 }
 
 /* ============================================================================
@@ -1309,6 +1592,7 @@ function installClickReport(map, layers) {
       drink: "❌ Drinking Water: No data.",
       landslide: "❌ Landslide Susceptibility: No data.",
       shaking: "❌ Shaking Potential: No data.",
+      fault: "❌ Nearest Fault: No data.",
     };
 
     // ===============================
@@ -1368,6 +1652,7 @@ MMI is a human-impact scale: higher values generally mean stronger shaking and g
           results.drink,
           results.landslide,
           results.shaking,
+          results.fault,
         ];
         if (reportEl) reportEl.innerHTML = ordered.join("<br><br>");
         hideSpinner();
@@ -1445,6 +1730,18 @@ MMI is a human-impact scale: higher values generally mean stronger shaking and g
       }
     })();
 
+    (async () => {
+      try {
+        results.fault = await getNearestFaultText(layers.faultsLayer, e.latlng);
+        results.fault += `<br><em>Distance is measured to the closest mapped fault line.</em>`;
+      } catch (err) {
+        console.error("Nearest fault error:", err);
+        results.fault = "■ <strong>Nearest Fault:</strong> Error fetching data.";
+      } finally {
+        checkDone();
+      }
+    })();
+    
     // ---- Flood: contains -> nearest
     layers.floodLayer.query().contains(e.latlng).run((err, fc) => {
       try {
@@ -1579,6 +1876,8 @@ MMI is a human-impact scale: higher values generally mean stronger shaking and g
 
   // Add a default basemap
   basemaps.baseOSM.addTo(map);
+  // Add grey besides California
+  addCaliforniaFocusMask(map);
 
   // 3) Create layers via factories (registry pattern)
   const fire = createFireLayers();
@@ -1606,49 +1905,73 @@ MMI is a human-impact scale: higher values generally mean stronger shaking and g
     highwayLayer: createHighwayLayer(),
     allRoadsLayer: createAllRoadsLayer(),
 
-    // POIs
-    schoolsLayer: createSchoolsLayer(),
-    healthCenters: createHealthCentersLayer(),
-    airports: createAirportsLayer(),
-    powerPlants: createPowerPlantsLayer(),
-    stateBridges: createStateBridgesLayer(),
-    localBridges: createLocalBridgesLayer(),
-    parks: createParksLayer(),
-    fireStations: createFireStationsLayer(),
-    universities: universities.layer,
-
-    // EV
+    // POIs (zoom-gated wrappers that respect toggle intent)
+    schoolsLayer: makeZoomGatedLayer(map, createSchoolsLayer(), UI.ZOOM_POI_MIN),
+    healthCenters: makeZoomGatedLayer(map, createHealthCentersLayer(), UI.ZOOM_POI_MIN),
+    airports: makeZoomGatedLayer(map, createAirportsLayer(), UI.ZOOM_POI_MIN),
+    powerPlants: makeZoomGatedLayer(map, createPowerPlantsLayer(), UI.ZOOM_POI_MIN),
+    stateBridges: makeZoomGatedLayer(map, createStateBridgesLayer(), UI.ZOOM_POI_MIN),
+    localBridges: makeZoomGatedLayer(map, createLocalBridgesLayer(), UI.ZOOM_POI_MIN),
+    parks: makeZoomGatedLayer(map, createParksLayer(), UI.ZOOM_POI_MIN),
+    fireStations: makeZoomGatedLayer(map, createFireStationsLayer(), UI.ZOOM_POI_MIN),
+    
+    // Universities (keep raw layer for metadata, gate separately)
+    universitiesRaw: universities.layer,
+    universities: makeZoomGatedLayer(map, universities.layer, UI.ZOOM_POI_MIN),
+    
+    // EV (gate the group layer; EV fetch already checks map.hasLayer(layer))
     evChargers: ev.layer,
   };
 
   // 4) Install EV handlers (keeps EV logic isolated)
   ev.installHandlers();
 
-  // 5) Roads zoom behavior (highway vs all roads)
-  map.on("zoomend", function () {
-    const z = map.getZoom();
-    if (z <= UI.ZOOM_ROADS_SWITCH) {
-      if (map.hasLayer(LAYERS.allRoadsLayer)) map.removeLayer(LAYERS.allRoadsLayer);
-      if (!map.hasLayer(LAYERS.highwayLayer)) map.addLayer(LAYERS.highwayLayer);
-    } else {
-      if (!map.hasLayer(LAYERS.allRoadsLayer)) map.addLayer(LAYERS.allRoadsLayer);
-      if (map.hasLayer(LAYERS.highwayLayer)) map.removeLayer(LAYERS.highwayLayer);
+  // 5) Roads zoom behavior that RESPECTS user toggles
+  (function installRoadZoomSwitching() {
+    let highwayWanted = false;
+    let allRoadsWanted = false;
+  
+    function syncRoads() {
+      const z = map.getZoom();
+  
+      // Apply “wanted” state first, then zoom visibility rules
+      // Highway
+      if (highwayWanted && z <= UI.ZOOM_ROADS_SWITCH) {
+        if (!map.hasLayer(LAYERS.highwayLayer)) map.addLayer(LAYERS.highwayLayer);
+      } else {
+        if (map.hasLayer(LAYERS.highwayLayer)) map.removeLayer(LAYERS.highwayLayer);
+      }
+  
+      // All Roads
+      if (allRoadsWanted && z > UI.ZOOM_ROADS_SWITCH) {
+        if (!map.hasLayer(LAYERS.allRoadsLayer)) map.addLayer(LAYERS.allRoadsLayer);
+      } else {
+        if (map.hasLayer(LAYERS.allRoadsLayer)) map.removeLayer(LAYERS.allRoadsLayer);
+      }
     }
-  });
+  
+    map.on("overlayadd", (e) => {
+      if (e.layer === LAYERS.highwayLayer) highwayWanted = true;
+      if (e.layer === LAYERS.allRoadsLayer) allRoadsWanted = true;
+      syncRoads();
+    });
+  
+    map.on("overlayremove", (e) => {
+      if (e.layer === LAYERS.highwayLayer) highwayWanted = false;
+      if (e.layer === LAYERS.allRoadsLayer) allRoadsWanted = false;
+      syncRoads();
+    });
+  
+    map.on("zoomend", syncRoads);
+  
+    // If you want one of them ON by default, set its flag true here.
+    // highwayWanted = true;
+  
+    // initial sync
+    syncRoads();
+  })();
 
-  // 6) POIs only show when zoomed in
-  toggleAtZoom(map, LAYERS.schoolsLayer, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.stateBridges, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.localBridges, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.healthCenters, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.airports, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.powerPlants, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.evChargers, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.universities, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.fireStations, UI.ZOOM_POI_MIN);
-  toggleAtZoom(map, LAYERS.parks, UI.ZOOM_POI_MIN);
-
-  // 7) Layer controls (single source: LAYER_TOGGLES)
+  // 6) Layer controls (single source: LAYER_TOGGLES)
   const LAYER_TOGGLES = {
     // Infrastructure
     Schools: LAYERS.schoolsLayer,
@@ -1688,18 +2011,18 @@ MMI is a human-impact scale: higher values generally mean stronger shaking and g
     LAYER_TOGGLES
   ).addTo(map);
 
-  // 8) Scale, home, legend
+  // 7) Scale, home, legend
   L.control.scale({ imperial: true }).addTo(map);
   addHomeButton(map);
   addLegendControls(map);
 
-  // 9) University domain decoding (metadata fetch after layer is created)
-  LAYERS.universities.metadata((err, md) => {
+  // 8) University domain decoding (metadata fetch after layer is created)
+  LAYERS.universitiesRaw.metadata((err, md) => {
     if (err) console.warn("Colleges metadata error:", err);
     else universities.buildDomainMaps(md);
   });
 
-  // 10) Click reporting
+  // 9) Click reporting
   installClickReport(map, {
     fireHazardSRA: LAYERS.fireHazardSRA,
     fireHazardLRA: LAYERS.fireHazardLRA,
@@ -1707,8 +2030,9 @@ MMI is a human-impact scale: higher values generally mean stronger shaking and g
     ozoneLayer: LAYERS.ozoneLayer,
     pmLayer: LAYERS.pmLayer,
     drinkLayer: LAYERS.drinkLayer,
+    faultsLayer: LAYERS.faultsLayer,
   });
 
-  // 11) Optional: start roads behavior right away (forces initial state)
+  // 10) Optional: start roads behavior right away (forces initial state)
   map.fire("zoomend");
 })();
