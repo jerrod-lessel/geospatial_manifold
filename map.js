@@ -1507,6 +1507,10 @@ function installClickReport(map, layers) {
     layerList.appendChild(label);
   });
 
+  document.getElementById("basemap-dropdown").addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
   document.addEventListener("click", () => {
     document.getElementById("basemap-dropdown")?.classList.add("hidden");
   });
