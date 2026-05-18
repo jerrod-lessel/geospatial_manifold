@@ -1,10 +1,12 @@
 /* ============================================================================
   map.js - Geospatial Manifold (Leaflet + Esri Leaflet)
-  VERSION: 2026-05-17.a
+  VERSION: 2026-05-18.a
 
-  Changes from 2026-05-01.b:
-  - Legal disclaimer toggle added to initAboutToggle
-  - Attribution styled to match Remnant Biome / Spectral Glimpse
+  Changes from 2026-05-17.a:
+  - Layer checkbox events now fire map overlayadd/overlayremove so zoom-gating
+    and road zoom-switching work correctly
+  - All dash-card-explain wording restored in _renderHazards, _renderAir,
+    _renderGeology (was stripped in 2026-05-17.a)
 ============================================================================ */
 
 window.addEventListener("error", (e) => {
@@ -75,6 +77,10 @@ function $(id) {
   return document.getElementById(id);
 }
 
+/* ============================================================================
+  MAP INIT + BASEMAPS
+============================================================================ */
+
 function createMap() {
   const m = L.map("map", { zoomControl: false }).setView(
     [DEFAULT_VIEW.lat, DEFAULT_VIEW.lng],
@@ -139,6 +145,10 @@ function addCaliforniaFocusMask(map) {
   }
 }
 
+/* ============================================================================
+  UI HELPERS
+============================================================================ */
+
 function initAboutToggle() {
   $("about-toggle")?.addEventListener("click", function () {
     $("about-panel")?.classList.toggle("hidden");
@@ -147,7 +157,6 @@ function initAboutToggle() {
     }, 50);
   });
 
-  // Disclaimer toggle
   $("disclaimer-toggle")?.addEventListener("click", () => {
     $("disclaimer-panel")?.classList.toggle("hidden");
     $("disclaimer-toggle")?.classList.toggle("open");
@@ -160,6 +169,10 @@ function showSpinner() {
 function hideSpinner() {
   $("panel-spinner")?.classList.add("hidden");
 }
+
+/* ============================================================================
+  HAZARD IDENTIFY HELPERS
+============================================================================ */
 
 const LANDSLIDE_CLASS_MAP = {
   10: { label: "X" }, 9: { label: "IX" }, 8: { label: "VIII" }, 7: { label: "VII" },
@@ -250,6 +263,10 @@ function identifyMMIAt(latlng) {
       });
   });
 }
+
+/* ============================================================================
+  LAYER FACTORIES
+============================================================================ */
 
 function fireStyle(feature) {
   const hazard = feature.properties.FHSZ_Description;
@@ -623,6 +640,10 @@ function createEvChargersLayer(map) {
   return { layer, installHandlers };
 }
 
+/* ============================================================================
+  DISTANCE HELPERS
+============================================================================ */
+
 function getDistanceToPolygonEdge(clickLatLng, feature) {
   const point = turf.point([clickLatLng.lng, clickLatLng.lat]);
   const geom = feature.geometry;
@@ -704,6 +725,10 @@ async function getNearestFaultInfo(faultsGroupLayer, latlng) {
   return best ? { name: best.name, dist: best.dist } : { name: null, dist: null };
 }
 
+/* ============================================================================
+  ZOOM VISIBILITY HELPERS
+============================================================================ */
+
 function makeZoomGatedLayer(map, innerLayer, minZoom) {
   const gate = L.layerGroup();
   let intendedOn = false;
@@ -720,8 +745,11 @@ function makeZoomGatedLayer(map, innerLayer, minZoom) {
   return gate;
 }
 
+/* ============================================================================
+  UI CONTROLS
+============================================================================ */
+
 function addZoomControl(map) {
-  // Zoom/home handled by HTML buttons in index.html
   document.getElementById("zoom-in").addEventListener("click",  () => map.zoomIn());
   document.getElementById("zoom-out").addEventListener("click", () => map.zoomOut());
   document.getElementById("home-btn").addEventListener("click", () =>
@@ -730,11 +758,10 @@ function addZoomControl(map) {
 }
 
 function addHomeButton(map) {
-  // Handled by HTML button above — no-op kept for compatibility
+  // Handled by HTML button — no-op kept for compatibility
 }
 
 function addLegendControls(map, layerToggles) {
-  // Legend toggle wired to HTML button in index.html
   document.getElementById("legend-toggle-btn").addEventListener("click", () => {
     const panel = document.getElementById("gm-legend-panel");
     if (panel) panel.style.display = panel.style.display === "none" ? "block" : "none";
@@ -761,8 +788,6 @@ function addLegendControls(map, layerToggles) {
     "backdrop-filter:blur(8px)",
   ].join(";");
 
-  // Legend panel — color ramps only, layers are in the basemap dropdown
-  let layerHTML = ``;
   legendDiv.innerHTML = `
     <h2 style="color:#e8eef2;font-size:0.85rem;margin:0 0 8px;">Legends</h2>
     <div style="margin-bottom:10px;">
@@ -836,6 +861,10 @@ function addLegendControls(map, layerToggles) {
   legendDiv.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: false });
   legendDiv.addEventListener("touchmove",  (e) => e.stopPropagation(), { passive: false });
 }
+
+/* ============================================================================
+  SLIDE PANEL CONTROLLER
+============================================================================ */
 
 const PanelController = (function () {
 
@@ -964,6 +993,8 @@ const PanelController = (function () {
     return "var(--haz-green)";
   }
 
+  // ---- HAZARDS TAB ----
+
   function _renderHazards(body, r) {
     let fireHTML;
     if (r.fire.zone) {
@@ -990,7 +1021,10 @@ const PanelController = (function () {
         <div class="dash-card-explain" style="margin-top:8px;">
           This location is not within a mapped Fire Hazard Severity Zone.
           The nearest zone, <strong>${r.fire.nearestZone}</strong>, is approximately
-          <strong>${r.fire.nearestDist} mi</strong> away.
+          <strong>${r.fire.nearestDist} mi</strong> away. Fire Hazard Severity Zones are mapped
+          by CAL FIRE and cover the State Responsibility Area (SRA) and Local Responsibility Area (LRA).
+          Areas outside these zones may still face fire risk, but are not subject to the same mandatory
+          defensible space or building standard requirements.
         </div>
       `);
     } else {
@@ -1003,14 +1037,23 @@ const PanelController = (function () {
       floodHTML = _card("flood hazard zone", `
         <div style="margin-bottom:8px;"><span class="haz-badge ${_floodBadgeClass(r.flood.zone)}">${r.flood.zone}</span></div>
         <div class="dash-card-explain">
-          This location is within <strong>${r.flood.zone}</strong> according to FEMA's National Flood Hazard Layer (NFHL).
+          This location is within <strong>${r.flood.zone}</strong> according to FEMA's National Flood
+          Hazard Layer (NFHL). The 1% Annual Chance Flood Hazard (also called the "100-year floodplain")
+          means there is a 1% chance of flooding in any given year and a 26% chance over a 30-year
+          mortgage. The 0.2% zone represents lower probability but still meaningful risk. Floodway
+          designations indicate the active channel where even minor development can increase flood risk
+          upstream and downstream. These zones are used to determine federal flood insurance requirements.
         </div>
       `);
     } else if (r.flood.nearestZone) {
       floodHTML = _card("flood hazard zone", `
         <span class="haz-badge haz-badge-gray">Outside mapped flood zones</span>
         <div class="dash-card-explain" style="margin-top:8px;">
-          The nearest zone, <strong>${r.flood.nearestZone}</strong>, is approximately <strong>${r.flood.nearestDist} mi</strong> away.
+          This location does not fall within a mapped FEMA flood hazard zone.
+          The nearest zone, <strong>${r.flood.nearestZone}</strong>, is approximately
+          <strong>${r.flood.nearestDist} mi</strong> away.
+          Properties outside mapped flood zones are generally considered lower risk but can still
+          experience flooding from unmapped or localized drainage events.
         </div>
       `);
     } else {
@@ -1030,7 +1073,12 @@ const PanelController = (function () {
         </div>
         <div class="dash-card-explain">
           The nearest mapped fault is the <strong>${r.fault.name}</strong>, approximately
-          <strong>${r.fault.dist.toFixed(2)} miles</strong> from this location.
+          <strong>${r.fault.dist.toFixed(2)} miles</strong> from this location. This distance is measured
+          to the closest point on the mapped fault trace. The actual rupture zone may be wider.
+          Proximity to a fault is one of the most significant factors in seismic risk. Quaternary faults
+          (those active within the last ~2.6 million years) are considered most likely to produce future
+          earthquakes. Distance alone doesn't capture everything — fault type, local geology, and soil
+          conditions all affect shaking intensity at any given point.
         </div>
       `);
     } else {
@@ -1039,13 +1087,15 @@ const PanelController = (function () {
     body.insertAdjacentHTML("beforeend", faultHTML);
   }
 
+  // ---- ENVIRONMENT & HEALTH TAB ----
+
   function _renderAir(body, r) {
     const hasAny = r.air.ozone !== null || r.air.pm !== null || r.air.water !== null ||
                    r.air.diesel !== null || r.air.pesticide !== null ||
                    r.air.lead !== null || r.air.asthma !== null || r.air.cesScore !== null;
 
     if (!hasAny) {
-      body.insertAdjacentHTML("beforeend", _noData("No CalEnviroScreen data found for this location."));
+      body.insertAdjacentHTML("beforeend", _noData("No CalEnviroScreen data found for this location. This area may not be within a mapped California census tract."));
       return;
     }
 
@@ -1058,6 +1108,16 @@ const PanelController = (function () {
         </div>
         <div class="severity-track"><div class="severity-fill" style="width:${r.air.cesScore}%;background:${scoreColor}"></div></div>
         <div class="severity-labels"><span>0th (lowest burden)</span><span>100th (highest)</span></div>
+        <div class="dash-card-explain">
+          The overall CalEnviroScreen score combines all pollution burden and population vulnerability
+          indicators into a single percentile for this census tract. A score of
+          <strong>${r.air.cesScore}th percentile</strong> means this tract has a higher cumulative
+          environmental burden than <strong>${r.air.cesScore}%</strong> of all California census tracts.
+          This score is used by CalEPA to identify disadvantaged communities for targeted investment
+          and environmental justice programs. It is a relative comparison tool — a high score does not
+          mean a location is unsafe, but rather that it experiences more cumulative pollution burden
+          than most other communities in the state.
+        </div>
       `));
     }
 
@@ -1080,11 +1140,136 @@ const PanelController = (function () {
         </div>
       `).join("");
       body.insertAdjacentHTML("beforeend", _card("indicator summary - statewide percentiles", `
-        <div class="dash-card-sub" style="margin-bottom:10px;">Higher percentile = greater burden relative to other Californians.</div>
+        <div class="dash-card-sub" style="margin-bottom:10px;">
+          Each bar shows how this census tract compares to all others statewide.
+          Higher percentile = greater burden relative to other Californians.
+        </div>
         ${barsHTML}
       `));
     }
+
+    if (r.air.ozone !== null) {
+      body.insertAdjacentHTML("beforeend", _card("ozone (ground-level)", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.ozone}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.ozoneRaw !== null ? " · " + r.air.ozoneRaw.toFixed(3) + " ppm" : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          Ground-level ozone forms when sunlight reacts with pollutants from cars, power plants, and
+          industrial sources. Unlike the protective ozone layer high in the atmosphere, ground-level
+          ozone irritates the airways, aggravates asthma and respiratory disease, and can reduce lung
+          function even in healthy people. This indicator summarizes warm-season (May–October) ozone
+          conditions from 2017–2019. A percentile of <strong>${r.air.ozone}</strong> means this tract
+          has higher ozone exposure than <strong>${r.air.ozone}%</strong> of California census tracts.
+        </div>
+      `));
+    }
+
+    if (r.air.pm !== null) {
+      body.insertAdjacentHTML("beforeend", _card("pm2.5 - fine particulate matter", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.pm}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.pmRaw !== null ? " · " + r.air.pmRaw.toFixed(2) + " µg/m³" : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          PM2.5 refers to fine particles smaller than 2.5 micrometers — about 30 times smaller than
+          a human hair. They come from combustion sources like cars, trucks, wildfires, and industry,
+          and can penetrate deep into the lungs and bloodstream. Long-term exposure is linked to
+          cardiovascular and respiratory disease, premature death, and developmental issues in children.
+          This indicator uses annual average concentrations from 2015–2017. A percentile of
+          <strong>${r.air.pm}</strong> means this tract has higher PM2.5 than
+          <strong>${r.air.pm}%</strong> of California census tracts.
+        </div>
+      `));
+    }
+
+    if (r.air.diesel !== null) {
+      body.insertAdjacentHTML("beforeend", _card("diesel particulate matter (diesel pm)", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.diesel}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.dieselRaw !== null ? " · " + r.air.dieselRaw.toFixed(2) + " µg/m³" : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          Diesel PM measures emissions from diesel-powered vehicles and equipment — primarily trucks,
+          buses, trains, construction equipment, and ships. Diesel exhaust contains a complex mixture
+          of gases and fine particles that are classified as a known carcinogen by the State of California.
+          Communities near freeways, ports, rail yards, and distribution centers tend to have higher
+          diesel PM exposure. A percentile of <strong>${r.air.diesel}</strong> means this tract has
+          higher diesel PM exposure than <strong>${r.air.diesel}%</strong> of California census tracts.
+        </div>
+      `));
+    }
+
+    if (r.air.pesticide !== null) {
+      body.insertAdjacentHTML("beforeend", _card("pesticide use", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.pesticide}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.pesticideRaw !== null ? " · " + r.air.pesticideRaw.toFixed(1) + " lbs/sq mi" : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          This indicator measures total pounds of selected agricultural pesticide active ingredients
+          applied per square mile in the census tract, based on California DPR data. A high percentile
+          reflects heavy nearby agricultural pesticide use — it does not mean residents are being directly
+          exposed or are in immediate danger. The primary concern is for people with regular or
+          occupational exposure, particularly farmworkers and those living immediately adjacent to
+          treated fields. A percentile of <strong>${r.air.pesticide}</strong> means this tract has
+          higher reported pesticide use than <strong>${r.air.pesticide}%</strong> of California census tracts.
+        </div>
+      `));
+    }
+
+    if (r.air.water !== null) {
+      body.insertAdjacentHTML("beforeend", _card("drinking water contaminants", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.water}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.waterRaw !== null ? " · raw score: " + r.air.waterRaw.toFixed(2) : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          This indicator combines contaminant levels and regulatory violations from drinking water
+          systems serving this area, based on data from 2011–2019 compliance cycles. A higher score
+          indicates a water system with more contaminant detections or more frequent violations. A
+          percentile of <strong>${r.air.water}</strong> means this tract has a higher drinking water
+          burden than <strong>${r.air.water}%</strong> of California census tracts.
+        </div>
+      `));
+    }
+
+    if (r.air.lead !== null) {
+      body.insertAdjacentHTML("beforeend", _card("children's lead risk from housing", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.lead}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.leadRaw !== null ? " · score: " + r.air.leadRaw.toFixed(2) : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          This indicator (new in CalEnviroScreen 4.0) estimates the risk of lead exposure for
+          children from housing, based on the age of homes and the prevalence of low-income households
+          with children under 6. There is no safe level of lead exposure for children — even low levels
+          can affect brain development, learning, and behavior. This is a risk indicator based on
+          housing characteristics, not a measurement of actual blood lead levels. A percentile of
+          <strong>${r.air.lead}</strong> means children in this tract face higher estimated lead
+          exposure risk than those in <strong>${r.air.lead}%</strong> of California census tracts.
+        </div>
+      `));
+    }
+
+    if (r.air.asthma !== null) {
+      body.insertAdjacentHTML("beforeend", _card("asthma emergency department visits", `
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span class="dash-card-value">${r.air.asthma}th</span>
+          <span class="dash-card-sub" style="margin:0;">percentile${r.air.asthmaRaw !== null ? " · " + r.air.asthmaRaw.toFixed(1) + " visits/10k" : ""}</span>
+        </div>
+        <div class="dash-card-explain">
+          This indicator measures age-adjusted rates of emergency department visits for asthma
+          per 10,000 residents, based on patient ZIP code data. Unlike the pollution indicators above
+          which measure exposure levels, this is a direct health outcome measure. A percentile of
+          <strong>${r.air.asthma}</strong> means this tract has higher asthma ED visit rates than
+          <strong>${r.air.asthma}%</strong> of California census tracts.
+        </div>
+      `));
+    }
   }
+
+  // ---- GEOLOGY TAB ----
 
   function _renderGeology(body, r) {
     if (r.geo.mmi !== null) {
@@ -1101,6 +1286,16 @@ const PanelController = (function () {
         </div>
         <div class="mmi-scale">${boxes}</div>
         <div class="mmi-scale-labels"><span>MMI 4 · Light</span><span>MMI 10 · Extreme</span></div>
+        <div class="dash-card-explain">
+          The Modified Mercalli Intensity (MMI) scale describes how strongly the ground shakes at a
+          specific location during an earthquake, based on estimated ground motion from historical
+          seismic data. An MMI of <strong>${fmt.valueStr} (${fmt.label})</strong> at this location is
+          the estimated intensity with a 10% probability of being exceeded over 50 years — meaning there
+          is roughly a 1-in-10 chance shaking this strong or stronger will occur here within a 50-year
+          period. At MMI VI (Strong), unsecured objects fall and minor structural damage is possible.
+          At MMI VIII+ (Severe to Extreme), major structural damage and collapse risk increases
+          significantly, especially in unreinforced masonry or older wood-frame buildings.
+        </div>
       `));
     } else {
       body.insertAdjacentHTML("beforeend", _noData("Shaking potential data is not available for this location."));
@@ -1118,11 +1313,21 @@ const PanelController = (function () {
         </div>
         <div class="severity-track"><div class="severity-fill" style="width:${pct}%;background:${color}"></div></div>
         <div class="severity-labels"><span>Class I (lowest)</span><span>Class X (highest)</span></div>
+        <div class="dash-card-explain">
+          This location falls within Landslide Susceptibility <strong>Class ${r.geo.landslide}</strong>
+          according to CGS Map Sheet 58. The classification reflects the relative likelihood of slope
+          failure based on geology, terrain steepness, and historical patterns — not an absolute
+          probability. Higher classes (VII–X) indicate terrain that is more prone to landslides,
+          debris flows, and earth movements under triggers like intense rainfall, prolonged saturation,
+          or strong earthquake shaking. It does not replace a site-specific geotechnical investigation.
+        </div>
       `));
     } else {
       body.insertAdjacentHTML("beforeend", _noData("No landslide susceptibility data found for this location."));
     }
   }
+
+  // ---- PDF Export ----
 
   function exportPDF() {
     const btn = $("export-pdf-btn");
@@ -1195,6 +1400,10 @@ const PanelController = (function () {
   return { open, close, setCoords, setLocationName, showLoading, showResults, init };
 
 })();
+
+/* ============================================================================
+  CLICK REPORT
+============================================================================ */
 
 const _clickMarkerIcon = L.divIcon({
   className: "",
@@ -1350,6 +1559,10 @@ function installClickReport(map, layers) {
   });
 }
 
+/* ============================================================================
+  BOOTSTRAP
+============================================================================ */
+
 (function main() {
   initAboutToggle();
   PanelController.init();
@@ -1442,7 +1655,7 @@ function installClickReport(map, layers) {
     "CES Overall Score":          LAYERS.cesScoreLayer,
   };
 
-  // Basemap widget (HTML dropdown, matching Remnant Biome)
+  // Basemap widget
   const BASEMAP_TILES = {
     "carto-light":    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     "carto-dark":     "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
@@ -1470,7 +1683,8 @@ function installClickReport(map, layers) {
     });
   });
 
-  // Build layer checkboxes inside the basemap dropdown
+  // Build layer checkboxes — fire overlayadd/overlayremove so zoom-gating
+  // and road zoom-switching listeners receive the correct events
   const layerList = document.getElementById("layer-toggles-list");
   Object.entries(LAYER_TOGGLES).forEach(([name, layer]) => {
     const label = document.createElement("label");
@@ -1479,8 +1693,13 @@ function installClickReport(map, layers) {
     cb.type = "checkbox";
     cb.style.cssText = "accent-color:#3ecfcf;cursor:pointer;flex-shrink:0;";
     cb.addEventListener("change", () => {
-      if (cb.checked) map.addLayer(layer);
-      else map.removeLayer(layer);
+      if (cb.checked) {
+        map.addLayer(layer);
+        map.fire("overlayadd", { layer });
+      } else {
+        map.removeLayer(layer);
+        map.fire("overlayremove", { layer });
+      }
     });
     label.appendChild(cb);
     label.appendChild(document.createTextNode(name));
@@ -1495,7 +1714,6 @@ function installClickReport(map, layers) {
     document.getElementById("basemap-dropdown")?.classList.add("hidden");
   });
 
-  // Scale bar bottom left, above title card
   L.control.scale({ imperial: true, position: "bottomleft" }).addTo(map);
   addZoomControl(map);
   addHomeButton(map);
