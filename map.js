@@ -721,31 +721,16 @@ function makeZoomGatedLayer(map, innerLayer, minZoom) {
 }
 
 function addZoomControl(map) {
-  L.control.zoom({ position: "topleft" }).addTo(map);
+  // Zoom/home handled by HTML buttons in index.html
+  document.getElementById("zoom-in").addEventListener("click",  () => map.zoomIn());
+  document.getElementById("zoom-out").addEventListener("click", () => map.zoomOut());
+  document.getElementById("home-btn").addEventListener("click", () =>
+    map.setView([DEFAULT_VIEW.lat, DEFAULT_VIEW.lng], DEFAULT_VIEW.zoom)
+  );
 }
 
 function addHomeButton(map) {
-  const homeButton = L.control({ position: "topleft" });
-  homeButton.onAdd = function () {
-    const container = L.DomUtil.create("div", "leaflet-bar leaflet-control");
-    const a = L.DomUtil.create("a", "", container);
-    a.href = "#";
-    a.title = "Reset View";
-    a.style.cssText = [
-      "display:flex","align-items:center","justify-content:center",
-      "width:26px","height:26px","font-size:18px","line-height:1",
-      "color:#94b4c8","background:rgba(13,25,38,0.92)",
-      "text-decoration:none","border:none",
-    ].join(";");
-    a.innerHTML = "&#x2302;";
-    a.addEventListener("mouseover", () => { a.style.background = "rgba(62,207,207,0.15)"; a.style.color = "#3ecfcf"; });
-    a.addEventListener("mouseout",  () => { a.style.background = "rgba(13,25,38,0.92)";  a.style.color = "#94b4c8"; });
-    a.addEventListener("click", (e) => { e.preventDefault(); map.setView([DEFAULT_VIEW.lat, DEFAULT_VIEW.lng], DEFAULT_VIEW.zoom); });
-    L.DomEvent.disableScrollPropagation(container);
-    L.DomEvent.disableClickPropagation(container);
-    return container;
-  };
-  homeButton.addTo(map);
+  // Handled by HTML button above — no-op kept for compatibility
 }
 
 function addLegendControls(map) {
@@ -1459,8 +1444,41 @@ function installClickReport(map, layers) {
     "CES Overall Score":          LAYERS.cesScoreLayer,
   };
 
+  // Basemap widget (HTML dropdown, matching Remnant Biome)
+  const BASEMAP_TILES = {
+    "carto-light":    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    "carto-dark":     "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    "esri-satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "osm":            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  };
+
+  let activeBasemapLayer = basemaps.cartoLight;
+
+  document.getElementById("basemap-toggle").addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.getElementById("basemap-dropdown").classList.toggle("hidden");
+  });
+
+  document.querySelectorAll(".basemap-opt").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".basemap-opt").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      map.removeLayer(activeBasemapLayer);
+      const key = btn.dataset.basemap;
+      const newLayer = L.tileLayer(BASEMAP_TILES[key], { attribution: "© Carto © OpenStreetMap contributors", maxZoom: 19 });
+      newLayer.addTo(map);
+      activeBasemapLayer = newLayer;
+      document.getElementById("basemap-dropdown").classList.add("hidden");
+    });
+  });
+
+  document.addEventListener("click", () => {
+    document.getElementById("basemap-dropdown")?.classList.add("hidden");
+  });
+
+  // Layer toggles (overlays only, no basemap picker)
   L.control.layers(
-    { "OpenStreetMap": basemaps.baseOSM, "Esri Satellite": basemaps.esriSat, "Carto Light": basemaps.cartoLight, "Carto Dark": basemaps.cartoDark },
+    {},
     LAYER_TOGGLES,
     { position: "topright", collapsed: true }
   ).addTo(map);
