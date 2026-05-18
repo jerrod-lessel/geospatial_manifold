@@ -1,6 +1,6 @@
 /* ============================================================================
   map.js - Geospatial Manifold (Leaflet + Esri Leaflet)
-  VERSION: 2026-05-18.a
+  VERSION: 2026-05-17.a
 
   Changes from 2026-05-01.b:
   - Legal disclaimer toggle added to initAboutToggle
@@ -1490,13 +1490,29 @@ function installClickReport(map, layers) {
     });
   });
 
+  // Build layer checkboxes inside the basemap dropdown
+  const layerList = document.getElementById("layer-toggles-list");
+  Object.entries(LAYER_TOGGLES).forEach(([name, layer]) => {
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:8px;padding:4px 14px;font-size:0.78rem;color:#7a9ab0;cursor:pointer;white-space:nowrap;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.style.cssText = "accent-color:#3ecfcf;cursor:pointer;flex-shrink:0;";
+    cb.addEventListener("change", () => {
+      if (cb.checked) map.addLayer(layer);
+      else map.removeLayer(layer);
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(name));
+    layerList.appendChild(label);
+  });
+
   document.addEventListener("click", () => {
     document.getElementById("basemap-dropdown")?.classList.add("hidden");
   });
 
-  // Layer toggles now live inside the legend panel (added via addLegendControls)
-  // Pass LAYER_TOGGLES so it can wire up checkboxes
-  L.control.scale({ imperial: true, position: "bottomright" }).addTo(map);
+  // Scale bar bottom left, above title card
+  L.control.scale({ imperial: true, position: "bottomleft" }).addTo(map);
   addZoomControl(map);
   addHomeButton(map);
   addLegendControls(map, LAYER_TOGGLES);
