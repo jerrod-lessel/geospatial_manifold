@@ -201,6 +201,99 @@ html, body {
    4) DARK LEAFLET CONTROLS
 ============================================================================ */
 
+/* Zoom + Home buttons (HTML, matching Remnant Biome) */
+#zoom-controls {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#zoom-controls button {
+  width: 30px;
+  height: 30px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 6px;
+  color: var(--ctrl-text);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+
+#zoom-controls button:hover {
+  background: var(--ctrl-hover);
+  color: var(--panel-accent);
+}
+
+/* Basemap widget (top right, matching Remnant Biome) */
+#basemap-widget {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 900;
+}
+
+#basemap-toggle {
+  width: 36px;
+  height: 36px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 8px;
+  color: var(--ctrl-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: background 0.15s, color 0.15s;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.5);
+}
+
+#basemap-toggle:hover {
+  background: var(--ctrl-hover);
+  color: var(--panel-accent);
+}
+
+#basemap-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--panel-radius);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  overflow: hidden;
+  z-index: 1000;
+  min-width: 120px;
+}
+
+.basemap-opt {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: var(--panel-text-muted);
+  font-size: 11px;
+  font-family: var(--font-main);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.basemap-opt:hover { background: rgba(62,207,207,0.1); color: var(--panel-text); }
+.basemap-opt.active { color: var(--panel-accent); background: rgba(62,207,207,0.08); font-weight: 500; }
+
 .leaflet-control-zoom a {
   background: var(--ctrl-bg) !important;
   color: var(--ctrl-text) !important;
@@ -361,6 +454,11 @@ html, body {
   border-color: #3a5a70 !important;
   color: #4a6a80 !important;
   font-size: 10px !important;
+}
+
+/* Lift scale bar so it doesn't sit on top of attribution */
+.leaflet-bottom.leaflet-right .leaflet-control-scale {
+  margin-bottom: 24px !important;
 }
 
 /* ============================================================================
