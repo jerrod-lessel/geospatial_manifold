@@ -1,37 +1,18 @@
 /* ============================================================================
   map.js - Geospatial Manifold (Leaflet + Esri Leaflet)
-  VERSION: 2026-05-01.b
+  VERSION: 2026-05-17.a
 
-  WHAT THIS FILE DOES:
-  - Initializes the map + basemap options (full viewport, no top banner)
-  - Creates ALL layers via "factory functions"
-  - Registers layers in one place (LAYERS object)
-  - Builds layer toggles from one place (LAYER_TOGGLES object)
-  - Adds UI controls (layers control, home button, legend)
-  - Implements click reporting via a slide-in dashboard panel:
-      - Hazards tab: fire, flood, nearest fault
-      - Environment & Health tab: CalEnviroScreen indicators
-      - Geology tab: shaking potential (MMI), landslide susceptibility
-  - PDF export of full location report
-  - EV charger overlay with Cloudflare Worker proxy
-
-  DEBUGGING:
-  - If UI disappears: open DevTools Console and look for errors.
+  Changes from 2026-05-01.b:
+  - Legal disclaimer toggle added to initAboutToggle
+  - Attribution styled to match Remnant Biome / Spectral Glimpse
 ============================================================================ */
 
-/* ============================================================================
-  0) GLOBAL SAFETY NETS
-============================================================================ */
 window.addEventListener("error", (e) => {
   console.error("Uncaught error:", e.error || e.message);
 });
 window.addEventListener("unhandledrejection", (e) => {
   console.error("Unhandled promise rejection:", e.reason);
 });
-
-/* ============================================================================
-  1) CENTRAL CONFIG
-============================================================================ */
 
 const DEFAULT_VIEW = { lat: 37.5, lng: -119.5, zoom: 6 };
 
@@ -78,14 +59,9 @@ const UI = {
 };
 
 const NREL = {
-  // API key stored in Cloudflare Worker, never put it here
   WORKER_URL: "https://round-dust-6f7a.jerrod-lessel.workers.dev",
   ATTRIBUTION: '<a href="https://afdc.energy.gov/stations/">NLR/AFDC</a>',
 };
-
-/* ============================================================================
-  2) SMALL UTILITIES
-============================================================================ */
 
 function debounce(fn, ms = 400) {
   let t = null;
@@ -98,10 +74,6 @@ function debounce(fn, ms = 400) {
 function $(id) {
   return document.getElementById(id);
 }
-
-/* ============================================================================
-  3) MAP INIT + BASEMAP FACTORY
-============================================================================ */
 
 function createMap() {
   const m = L.map("map", { zoomControl: false }).setView(
@@ -167,17 +139,18 @@ function addCaliforniaFocusMask(map) {
   }
 }
 
-/* ============================================================================
-  4) UI HELPERS (About toggle + Spinner)
-============================================================================ */
-
 function initAboutToggle() {
   $("about-toggle")?.addEventListener("click", function () {
     $("about-panel")?.classList.toggle("hidden");
-    // Tell Leaflet the map size may have shifted
     setTimeout(() => {
       if (window._leafletMap) window._leafletMap.invalidateSize();
     }, 50);
+  });
+
+  // Disclaimer toggle
+  $("disclaimer-toggle")?.addEventListener("click", () => {
+    $("disclaimer-panel")?.classList.toggle("hidden");
+    $("disclaimer-toggle")?.classList.toggle("open");
   });
 }
 
@@ -187,10 +160,6 @@ function showSpinner() {
 function hideSpinner() {
   $("panel-spinner")?.classList.add("hidden");
 }
-
-/* ============================================================================
-  5) HAZARD IDENTIFY HELPERS (Landslide + Shaking)
-============================================================================ */
 
 const LANDSLIDE_CLASS_MAP = {
   10: { label: "X" }, 9: { label: "IX" }, 8: { label: "VIII" }, 7: { label: "VII" },
@@ -281,10 +250,6 @@ function identifyMMIAt(latlng) {
       });
   });
 }
-
-/* ============================================================================
-  6) LAYER FACTORIES
-============================================================================ */
 
 function fireStyle(feature) {
   const hazard = feature.properties.FHSZ_Description;
@@ -658,10 +623,6 @@ function createEvChargersLayer(map) {
   return { layer, installHandlers };
 }
 
-/* ============================================================================
-  7) DISTANCE HELPERS (Turf)
-============================================================================ */
-
 function getDistanceToPolygonEdge(clickLatLng, feature) {
   const point = turf.point([clickLatLng.lng, clickLatLng.lat]);
   const geom = feature.geometry;
@@ -712,17 +673,11 @@ function findBestFaultName(props) {
 function queryFaultLayerNearby(faultFeatureLayer, latlng, meters) {
   return new Promise((resolve) => {
     if (!faultFeatureLayer?.query) return resolve({ err: "No query()", fc: null });
-
     const degOffset = meters / 111320;
     const sw = L.latLng(latlng.lat - degOffset, latlng.lng - degOffset);
     const ne = L.latLng(latlng.lat + degOffset, latlng.lng + degOffset);
     const bounds = L.latLngBounds(sw, ne);
-
-    faultFeatureLayer
-      .query()
-      .within(bounds)
-      .returnGeometry(true)
-      .run((err, fc) => resolve({ err, fc }));
+    faultFeatureLayer.query().within(bounds).returnGeometry(true).run((err, fc) => resolve({ err, fc }));
   });
 }
 
@@ -749,10 +704,6 @@ async function getNearestFaultInfo(faultsGroupLayer, latlng) {
   return best ? { name: best.name, dist: best.dist } : { name: null, dist: null };
 }
 
-/* ============================================================================
-  8) ZOOM VISIBILITY HELPERS
-============================================================================ */
-
 function makeZoomGatedLayer(map, innerLayer, minZoom) {
   const gate = L.layerGroup();
   let intendedOn = false;
@@ -769,10 +720,6 @@ function makeZoomGatedLayer(map, innerLayer, minZoom) {
   return gate;
 }
 
-/* ============================================================================
-  9) UI CONTROLS (Zoom + Home + Legend)
-============================================================================ */
-
 function addZoomControl(map) {
   L.control.zoom({ position: "topleft" }).addTo(map);
 }
@@ -781,39 +728,19 @@ function addHomeButton(map) {
   const homeButton = L.control({ position: "topleft" });
   homeButton.onAdd = function () {
     const container = L.DomUtil.create("div", "leaflet-bar leaflet-control");
-    // Build the anchor exactly like Leaflet zoom buttons so styling matches perfectly
     const a = L.DomUtil.create("a", "", container);
     a.href = "#";
     a.title = "Reset View";
-    // Inline styles guarantee color match regardless of CSS specificity wars
     a.style.cssText = [
-      "display:flex",
-      "align-items:center",
-      "justify-content:center",
-      "width:26px",
-      "height:26px",
-      "font-size:18px",
-      "line-height:1",
-      "color:#94b4c8",
-      "background:rgba(13,25,38,0.92)",
-      "text-decoration:none",
-      "border:none",
+      "display:flex","align-items:center","justify-content:center",
+      "width:26px","height:26px","font-size:18px","line-height:1",
+      "color:#94b4c8","background:rgba(13,25,38,0.92)",
+      "text-decoration:none","border:none",
     ].join(";");
     a.innerHTML = "&#x2302;";
-
-    a.addEventListener("mouseover", () => {
-      a.style.background = "rgba(62,207,207,0.15)";
-      a.style.color = "#3ecfcf";
-    });
-    a.addEventListener("mouseout", () => {
-      a.style.background = "rgba(13,25,38,0.92)";
-      a.style.color = "#94b4c8";
-    });
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      map.setView([DEFAULT_VIEW.lat, DEFAULT_VIEW.lng], DEFAULT_VIEW.zoom);
-    });
-
+    a.addEventListener("mouseover", () => { a.style.background = "rgba(62,207,207,0.15)"; a.style.color = "#3ecfcf"; });
+    a.addEventListener("mouseout",  () => { a.style.background = "rgba(13,25,38,0.92)";  a.style.color = "#94b4c8"; });
+    a.addEventListener("click", (e) => { e.preventDefault(); map.setView([DEFAULT_VIEW.lat, DEFAULT_VIEW.lng], DEFAULT_VIEW.zoom); });
     L.DomEvent.disableScrollPropagation(container);
     L.DomEvent.disableClickPropagation(container);
     return container;
@@ -822,12 +749,10 @@ function addHomeButton(map) {
 }
 
 function addLegendControls(map) {
-  // ---- Legend toggle button (topright Leaflet control) ----
   const LegendToggleControl = L.Control.extend({
     options: { position: "topright" },
     onAdd: function () {
       const c = L.DomUtil.create("div", "leaflet-bar custom-legend-button");
-      // Hamburger icon (three horizontal lines) — distinct from the stacked-layers icon on the layers button
       c.innerHTML = `<span class="legend-icon" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="6"  x2="21" y2="6"></line>
@@ -846,32 +771,18 @@ function addLegendControls(map) {
   });
   map.addControl(new LegendToggleControl());
 
-  // ---- Legend panel as plain DOM div (NOT a Leaflet control) ----
-  // This eliminates the double-box — only the toggle button is a Leaflet control.
   const legendDiv = document.createElement("div");
   legendDiv.id = "gm-legend-panel";
   legendDiv.style.cssText = [
-    "display:none",
-    "position:absolute",
-    "top:10px",
-    "right:56px",        // sits left of the toggle button
-    "z-index:800",
-    "max-height:70vh",
-    "width:250px",
-    "overflow-y:auto",
-    "background:rgba(13,25,38,0.95)",
-    "border:1px solid rgba(255,255,255,0.1)",
-    "border-radius:8px",
-    "padding:10px",
-    "font-size:0.82rem",
-    "color:#7a9ab0",
-    "box-shadow:0 2px 12px rgba(0,0,0,0.5)",
-    "backdrop-filter:blur(8px)",
+    "display:none","position:absolute","top:10px","right:56px","z-index:800",
+    "max-height:70vh","width:250px","overflow-y:auto",
+    "background:rgba(13,25,38,0.95)","border:1px solid rgba(255,255,255,0.1)",
+    "border-radius:8px","padding:10px","font-size:0.82rem","color:#7a9ab0",
+    "box-shadow:0 2px 12px rgba(0,0,0,0.5)","backdrop-filter:blur(8px)",
   ].join(";");
 
   legendDiv.innerHTML = `
     <h2 style="color:#e8eef2;font-size:0.85rem;margin:0 0 8px;">Legends</h2>
-
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Flood Hazard Zones (FEMA)</strong>
       <div style="display:block;margin-top:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#feb24c;margin-right:6px;vertical-align:middle;"></span><em> 0.2% Annual Chance Flood Hazard</em></div>
@@ -879,7 +790,6 @@ function addLegendControls(map) {
       <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#769ccd;margin-right:6px;vertical-align:middle;"></span><em> Regulatory Floodway</em></div>
       <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#e5d099;margin-right:6px;vertical-align:middle;"></span><em> Reduced Risk Due to Levee</em></div>
     </div>
-
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Fire Hazard Severity Zones</strong>
       <div style="display:flex;gap:2px;margin-top:6px;">
@@ -889,7 +799,6 @@ function addLegendControls(map) {
       </div>
       <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-top:3px;"><span>Moderate</span><span>Very High</span></div>
     </div>
-
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Landslide Susceptibility (CGS)</strong>
       <div style="display:flex;gap:2px;margin-top:6px;">
@@ -902,7 +811,6 @@ function addLegendControls(map) {
       </div>
       <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-top:3px;"><span>Lower</span><span>Higher</span></div>
     </div>
-
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Shaking Potential (MMI, 10% in 50 years)</strong>
       <div style="display:flex;gap:2px;margin-top:6px;">
@@ -916,7 +824,6 @@ function addLegendControls(map) {
       </div>
       <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-top:3px;"><span>MMI 4</span><span>MMI 10+</span></div>
     </div>
-
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">CalEnviroScreen Indicators (Percentile)</strong>
       <div style="display:flex;gap:2px;margin-top:6px;">
@@ -928,33 +835,24 @@ function addLegendControls(map) {
       </div>
       <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-top:3px;"><span>0-10</span><span>90-100</span></div>
     </div>
-
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Active Fires (WFIGS / NIFC)</strong>
       <div style="display:flex;align-items:center;gap:8px;margin-top:6px;"><span style="font-size:15px;">🔥</span><span>Small incident</span></div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:4px;"><span style="font-size:24px;">🔥</span><span>Large incident</span></div>
     </div>
-
     <div>
       <strong style="color:#e8eef2;font-size:0.78rem;">Faults</strong>
       <div style="margin-top:4px;">Click fault lines to see fault name and age/activity.</div>
     </div>
   `;
 
-  // Inject into the map container so it overlays the map naturally
   map.getContainer().appendChild(legendDiv);
-
-  // Prevent map interactions when hovering legend
   legendDiv.addEventListener("mouseenter", () => map.scrollWheelZoom.disable());
   legendDiv.addEventListener("mouseleave", () => map.scrollWheelZoom.enable());
   legendDiv.addEventListener("wheel",      (e) => e.stopPropagation(), { passive: false });
   legendDiv.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: false });
   legendDiv.addEventListener("touchmove",  (e) => e.stopPropagation(), { passive: false });
 }
-
-/* ============================================================================
-  10) SLIDE PANEL CONTROLLER
-============================================================================ */
 
 const PanelController = (function () {
 
@@ -1018,8 +916,6 @@ const PanelController = (function () {
     if (tab === "air")     _renderAir(body, r);
     if (tab === "geology") _renderGeology(body, r);
   }
-
-  // ---- Helpers ----
 
   function _card(labelText, innerHTML) {
     return `<div class="dash-card"><div class="dash-card-label">${labelText}</div>${innerHTML}</div>`;
@@ -1085,8 +981,6 @@ const PanelController = (function () {
     return "var(--haz-green)";
   }
 
-  // ---- HAZARDS TAB ----
-
   function _renderHazards(body, r) {
     let fireHTML;
     if (r.fire.zone) {
@@ -1113,10 +1007,7 @@ const PanelController = (function () {
         <div class="dash-card-explain" style="margin-top:8px;">
           This location is not within a mapped Fire Hazard Severity Zone.
           The nearest zone, <strong>${r.fire.nearestZone}</strong>, is approximately
-          <strong>${r.fire.nearestDist} mi</strong> away. Fire Hazard Severity Zones are mapped
-          by CAL FIRE and cover the State Responsibility Area (SRA) and Local Responsibility Area (LRA).
-          Areas outside these zones may still face fire risk, but are not subject to the same mandatory
-          defensible space or building standard requirements.
+          <strong>${r.fire.nearestDist} mi</strong> away.
         </div>
       `);
     } else {
@@ -1129,23 +1020,14 @@ const PanelController = (function () {
       floodHTML = _card("flood hazard zone", `
         <div style="margin-bottom:8px;"><span class="haz-badge ${_floodBadgeClass(r.flood.zone)}">${r.flood.zone}</span></div>
         <div class="dash-card-explain">
-          This location is within <strong>${r.flood.zone}</strong> according to FEMA's National Flood
-          Hazard Layer (NFHL). The 1% Annual Chance Flood Hazard (also called the "100-year floodplain")
-          means there is a 1% chance of flooding in any given year and a 26% chance over a 30-year
-          mortgage. The 0.2% zone represents lower probability but still meaningful risk. Floodway
-          designations indicate the active channel where even minor development can increase flood risk
-          upstream and downstream. These zones are used to determine federal flood insurance requirements.
+          This location is within <strong>${r.flood.zone}</strong> according to FEMA's National Flood Hazard Layer (NFHL).
         </div>
       `);
     } else if (r.flood.nearestZone) {
       floodHTML = _card("flood hazard zone", `
         <span class="haz-badge haz-badge-gray">Outside mapped flood zones</span>
         <div class="dash-card-explain" style="margin-top:8px;">
-          This location does not fall within a mapped FEMA flood hazard zone.
-          The nearest zone, <strong>${r.flood.nearestZone}</strong>, is approximately
-          <strong>${r.flood.nearestDist} mi</strong> away.
-          Properties outside mapped flood zones are generally considered lower risk but can still
-          experience flooding from unmapped or localized drainage events.
+          The nearest zone, <strong>${r.flood.nearestZone}</strong>, is approximately <strong>${r.flood.nearestDist} mi</strong> away.
         </div>
       `);
     } else {
@@ -1165,12 +1047,7 @@ const PanelController = (function () {
         </div>
         <div class="dash-card-explain">
           The nearest mapped fault is the <strong>${r.fault.name}</strong>, approximately
-          <strong>${r.fault.dist.toFixed(2)} miles</strong> from this location. This distance is measured
-          to the closest point on the mapped fault trace. The actual rupture zone may be wider.
-          Proximity to a fault is one of the most significant factors in seismic risk. Quaternary faults
-          (those active within the last ~2.6 million years) are considered most likely to produce future
-          earthquakes. Distance alone doesn't capture everything, fault type, local geology, and soil
-          conditions all affect shaking intensity at any given point.
+          <strong>${r.fault.dist.toFixed(2)} miles</strong> from this location.
         </div>
       `);
     } else {
@@ -1179,15 +1056,13 @@ const PanelController = (function () {
     body.insertAdjacentHTML("beforeend", faultHTML);
   }
 
-  // ---- ENVIRONMENT & HEALTH TAB ----
-
   function _renderAir(body, r) {
     const hasAny = r.air.ozone !== null || r.air.pm !== null || r.air.water !== null ||
                    r.air.diesel !== null || r.air.pesticide !== null ||
                    r.air.lead !== null || r.air.asthma !== null || r.air.cesScore !== null;
 
     if (!hasAny) {
-      body.insertAdjacentHTML("beforeend", _noData("No CalEnviroScreen data found for this location. This area may not be within a mapped California census tract."));
+      body.insertAdjacentHTML("beforeend", _noData("No CalEnviroScreen data found for this location."));
       return;
     }
 
@@ -1200,16 +1075,6 @@ const PanelController = (function () {
         </div>
         <div class="severity-track"><div class="severity-fill" style="width:${r.air.cesScore}%;background:${scoreColor}"></div></div>
         <div class="severity-labels"><span>0th (lowest burden)</span><span>100th (highest)</span></div>
-        <div class="dash-card-explain">
-          The overall CalEnviroScreen score combines all pollution burden and population vulnerability
-          indicators into a single percentile for this census tract. A score of
-          <strong>${r.air.cesScore}th percentile</strong> means this tract has a higher cumulative
-          environmental burden than <strong>${r.air.cesScore}%</strong> of all California census tracts.
-          This score is used by CalEPA to identify disadvantaged communities for targeted investment
-          and environmental justice programs. It is a relative comparison tool. A high score does not
-          mean a location is unsafe, but rather that it experiences more cumulative pollution burden
-          than most other communities in the state.
-        </div>
       `));
     }
 
@@ -1232,136 +1097,11 @@ const PanelController = (function () {
         </div>
       `).join("");
       body.insertAdjacentHTML("beforeend", _card("indicator summary - statewide percentiles", `
-        <div class="dash-card-sub" style="margin-bottom:10px;">
-          Each bar shows how this census tract compares to all others statewide.
-          Higher percentile = greater burden relative to other Californians.
-        </div>
+        <div class="dash-card-sub" style="margin-bottom:10px;">Higher percentile = greater burden relative to other Californians.</div>
         ${barsHTML}
       `));
     }
-
-    if (r.air.ozone !== null) {
-      body.insertAdjacentHTML("beforeend", _card("ozone (ground-level)", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.ozone}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.ozoneRaw !== null ? " · " + r.air.ozoneRaw.toFixed(3) + " ppm" : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          Ground-level ozone forms when sunlight reacts with pollutants from cars, power plants, and
-          industrial sources. Unlike the protective ozone layer high in the atmosphere, ground-level
-          ozone irritates the airways, aggravates asthma and respiratory disease, and can reduce lung
-          function even in healthy people. This indicator summarizes warm-season (May-October) ozone
-          conditions from 2017-2019. A percentile of <strong>${r.air.ozone}</strong> means this tract
-          has higher ozone exposure than <strong>${r.air.ozone}%</strong> of California census tracts.
-        </div>
-      `));
-    }
-
-    if (r.air.pm !== null) {
-      body.insertAdjacentHTML("beforeend", _card("pm2.5 - fine particulate matter", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.pm}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.pmRaw !== null ? " · " + r.air.pmRaw.toFixed(2) + " µg/m³" : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          PM2.5 refers to fine particles smaller than 2.5 micrometers, about 30 times smaller than
-          a human hair. They come from combustion sources like cars, trucks, wildfires, and industry,
-          and can penetrate deep into the lungs and bloodstream. Long-term exposure is linked to
-          cardiovascular and respiratory disease, premature death, and developmental issues in children.
-          This indicator uses annual average concentrations from 2015-2017. A percentile of
-          <strong>${r.air.pm}</strong> means this tract has higher PM2.5 than
-          <strong>${r.air.pm}%</strong> of California census tracts.
-        </div>
-      `));
-    }
-
-    if (r.air.diesel !== null) {
-      body.insertAdjacentHTML("beforeend", _card("diesel particulate matter (diesel pm)", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.diesel}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.dieselRaw !== null ? " · " + r.air.dieselRaw.toFixed(2) + " µg/m³" : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          Diesel PM measures emissions from diesel-powered vehicles and equipment, primarily trucks,
-          buses, trains, construction equipment, and ships. Diesel exhaust contains a complex mixture
-          of gases and fine particles that are classified as a known carcinogen by the State of California.
-          Communities near freeways, ports, rail yards, and distribution centers tend to have higher
-          diesel PM exposure. A percentile of <strong>${r.air.diesel}</strong> means this tract has
-          higher diesel PM exposure than <strong>${r.air.diesel}%</strong> of California census tracts.
-        </div>
-      `));
-    }
-
-    if (r.air.pesticide !== null) {
-      body.insertAdjacentHTML("beforeend", _card("pesticide use", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.pesticide}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.pesticideRaw !== null ? " · " + r.air.pesticideRaw.toFixed(1) + " lbs/sq mi" : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          This indicator measures total pounds of selected agricultural pesticide active ingredients
-          applied per square mile in the census tract, based on California DPR data. A high percentile
-          reflects heavy nearby agricultural pesticide use, it does not mean residents are being directly
-          exposed or are in immediate danger. The primary concern is for people with regular or
-          occupational exposure, particularly farmworkers and those living immediately adjacent to
-          treated fields. A percentile of <strong>${r.air.pesticide}</strong> means this tract has
-          higher reported pesticide use than <strong>${r.air.pesticide}%</strong> of California census tracts.
-        </div>
-      `));
-    }
-
-    if (r.air.water !== null) {
-      body.insertAdjacentHTML("beforeend", _card("drinking water contaminants", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.water}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.waterRaw !== null ? " · raw score: " + r.air.waterRaw.toFixed(2) : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          This indicator combines contaminant levels and regulatory violations from drinking water
-          systems serving this area, based on data from 2011-2019 compliance cycles. A higher score
-          indicates a water system with more contaminant detections or more frequent violations. A
-          percentile of <strong>${r.air.water}</strong> means this tract has a higher drinking water
-          burden than <strong>${r.air.water}%</strong> of California census tracts.
-        </div>
-      `));
-    }
-
-    if (r.air.lead !== null) {
-      body.insertAdjacentHTML("beforeend", _card("children's lead risk from housing", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.lead}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.leadRaw !== null ? " · score: " + r.air.leadRaw.toFixed(2) : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          This indicator (new in CalEnviroScreen 4.0) estimates the risk of lead exposure for
-          children from housing, based on the age of homes and the prevalence of low-income households
-          with children under 6. There is no safe level of lead exposure for children, even low levels
-          can affect brain development, learning, and behavior. This is a risk indicator based on
-          housing characteristics, not a measurement of actual blood lead levels. A percentile of
-          <strong>${r.air.lead}</strong> means children in this tract face higher estimated lead
-          exposure risk than those in <strong>${r.air.lead}%</strong> of California census tracts.
-        </div>
-      `));
-    }
-
-    if (r.air.asthma !== null) {
-      body.insertAdjacentHTML("beforeend", _card("asthma emergency department visits", `
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
-          <span class="dash-card-value">${r.air.asthma}th</span>
-          <span class="dash-card-sub" style="margin:0;">percentile${r.air.asthmaRaw !== null ? " · " + r.air.asthmaRaw.toFixed(1) + " visits/10k" : ""}</span>
-        </div>
-        <div class="dash-card-explain">
-          This indicator measures age-adjusted rates of emergency department visits for asthma
-          per 10,000 residents, based on patient ZIP code data. Unlike the pollution indicators above
-          which measure exposure levels, this is a direct health outcome measure. A percentile of
-          <strong>${r.air.asthma}</strong> means this tract has higher asthma ED visit rates than
-          <strong>${r.air.asthma}%</strong> of California census tracts.
-        </div>
-      `));
-    }
   }
-
-  // ---- GEOLOGY TAB ----
 
   function _renderGeology(body, r) {
     if (r.geo.mmi !== null) {
@@ -1378,16 +1118,6 @@ const PanelController = (function () {
         </div>
         <div class="mmi-scale">${boxes}</div>
         <div class="mmi-scale-labels"><span>MMI 4 · Light</span><span>MMI 10 · Extreme</span></div>
-        <div class="dash-card-explain">
-          The Modified Mercalli Intensity (MMI) scale describes how strongly the ground shakes at a
-          specific location during an earthquake, based on estimated ground motion from historical
-          seismic data. An MMI of <strong>${fmt.valueStr} (${fmt.label})</strong> at this location is
-          the estimated intensity with a 10% probability of being exceeded over 50 years, meaning there
-          is roughly a 1-in-10 chance shaking this strong or stronger will occur here within a 50-year
-          period. At MMI VI (Strong), unsecured objects fall and minor structural damage is possible.
-          At MMI VIII+ (Severe to Extreme), major structural damage and collapse risk increases
-          significantly, especially in unreinforced masonry or older wood-frame buildings.
-        </div>
       `));
     } else {
       body.insertAdjacentHTML("beforeend", _noData("Shaking potential data is not available for this location."));
@@ -1405,21 +1135,11 @@ const PanelController = (function () {
         </div>
         <div class="severity-track"><div class="severity-fill" style="width:${pct}%;background:${color}"></div></div>
         <div class="severity-labels"><span>Class I (lowest)</span><span>Class X (highest)</span></div>
-        <div class="dash-card-explain">
-          This location falls within Landslide Susceptibility <strong>Class ${r.geo.landslide}</strong>
-          according to CGS Map Sheet 58. The classification reflects the relative likelihood of slope
-          failure based on geology, terrain steepness, and historical patterns, not an absolute
-          probability. Higher classes (VII-X) indicate terrain that is more prone to landslides,
-          debris flows, and earth movements under triggers like intense rainfall, prolonged saturation,
-          or strong earthquake shaking. It does not replace a site-specific geotechnical investigation.
-        </div>
       `));
     } else {
       body.insertAdjacentHTML("beforeend", _noData("No landslide susceptibility data found for this location."));
     }
   }
-
-  // ---- PDF Export ----
 
   function exportPDF() {
     const btn = $("export-pdf-btn");
@@ -1453,17 +1173,9 @@ const PanelController = (function () {
       const cards = bodyEl?.querySelectorAll(".dash-card, .no-data-card") || [];
       cards.forEach((card) => {
         const clone = card.cloneNode(true);
-        // Remove visual-only elements that don't print well
         clone.querySelectorAll(".severity-track,.mmi-scale,.pct-track,.stat-row,.haz-badge").forEach(el => el.remove());
-        // Force all text dark for white PDF background
         clone.style.cssText = "margin-bottom:12px;padding:10px;border:1px solid #ccc;border-radius:6px;background:#f9f9f9;color:#111;";
-        // Walk all child elements and force readable colors
-        clone.querySelectorAll("*").forEach(el => {
-          el.style.color = "#222";
-          el.style.background = "transparent";
-          el.style.borderColor = "#ccc";
-        });
-        // Re-darken label text specifically
+        clone.querySelectorAll("*").forEach(el => { el.style.color = "#222"; el.style.background = "transparent"; el.style.borderColor = "#ccc"; });
         clone.querySelectorAll(".dash-card-label").forEach(el => { el.style.color = "#555"; el.style.fontSize = "10px"; });
         clone.querySelectorAll(".dash-card-explain,.dash-card-sub,.fault-dist-text,.pct-val,.pct-name").forEach(el => { el.style.color = "#333"; });
         clone.querySelectorAll(".dash-card-value,.fault-name-text").forEach(el => { el.style.color = "#0c1f2c"; el.style.fontWeight = "600"; });
@@ -1501,11 +1213,6 @@ const PanelController = (function () {
 
 })();
 
-/* ============================================================================
-  11) CLICK REPORT
-============================================================================ */
-
-// Pulsing click marker — matches Spectral Glimpse style
 const _clickMarkerIcon = L.divIcon({
   className: "",
   html: '<div class="click-marker-dot"></div>',
@@ -1533,14 +1240,10 @@ function installClickReport(map, layers) {
       flood: { zone: null, nearestZone: null, nearestDist: null },
       fault: { name: null, dist: null },
       air:   {
-        ozone: null, ozoneRaw: null,
-        pm: null, pmRaw: null,
-        water: null, waterRaw: null,
-        diesel: null, dieselRaw: null,
-        pesticide: null, pesticideRaw: null,
-        lead: null, leadRaw: null,
-        asthma: null, asthmaRaw: null,
-        cesScore: null,
+        ozone: null, ozoneRaw: null, pm: null, pmRaw: null,
+        water: null, waterRaw: null, diesel: null, dieselRaw: null,
+        pesticide: null, pesticideRaw: null, lead: null, leadRaw: null,
+        asthma: null, asthmaRaw: null, cesScore: null,
       },
       geo: { mmi: null, landslide: null },
     };
@@ -1559,23 +1262,12 @@ function installClickReport(map, layers) {
             PanelController.setLocationName(name);
           })
           .catch(() => PanelController.setLocationName("Location Report"))
-          .finally(() => {
-            PanelController.showResults(results, e.latlng);
-            hideSpinner();
-          });
+          .finally(() => { PanelController.showResults(results, e.latlng); hideSpinner(); });
       }
     }
 
     function queryContains(layer, latlng) {
-      return new Promise((resolve) => {
-        layer.query().contains(latlng).run((err, fc) => resolve({ err, fc }));
-      });
-    }
-
-    function queryNearby(layer, latlng, meters) {
-      return new Promise((resolve) => {
-        layer.query().nearby(latlng, meters).run((err, fc) => resolve({ err, fc }));
-      });
+      return new Promise((resolve) => { layer.query().contains(latlng).run((err, fc) => resolve({ err, fc })); });
     }
 
     async function nearestZoneAcross(layersArr, fieldName) {
@@ -1585,14 +1277,9 @@ function installClickReport(map, layers) {
         const sw = L.latLng(e.latlng.lat - degOffset, e.latlng.lng - degOffset);
         const ne = L.latLng(e.latlng.lat + degOffset, e.latlng.lng + degOffset);
         const bounds = L.latLngBounds(sw, ne);
-
         const { err, fc } = await new Promise((resolve) => {
-          lyr.query()
-            .intersects(bounds)
-            .returnGeometry(true)
-            .run((err, fc) => resolve({ err, fc }));
+          lyr.query().intersects(bounds).returnGeometry(true).run((err, fc) => resolve({ err, fc }));
         });
-
         if (err || !fc?.features?.length) continue;
         for (const f of fc.features) {
           const dist = parseFloat(getDistanceToPolygonEdge(e.latlng, f));
@@ -1603,7 +1290,6 @@ function installClickReport(map, layers) {
       return best;
     }
 
-    // Task 1: Fire
     (async () => {
       try {
         const lra = await queryContains(layers.fireHazardLRA, e.latlng);
@@ -1616,7 +1302,6 @@ function installClickReport(map, layers) {
       finally { checkDone(); }
     })();
 
-    // Task 2: Flood
     (async () => {
       try {
         const res = await queryContains(layers.floodLayer, e.latlng);
@@ -1627,65 +1312,47 @@ function installClickReport(map, layers) {
       finally { checkDone(); }
     })();
 
-    // Task 3: Fault
     (async () => {
       try {
         const info = await getNearestFaultInfo(layers.faultsLayer, e.latlng);
-        results.fault.name = info.name;
-        results.fault.dist = info.dist;
+        results.fault.name = info.name; results.fault.dist = info.dist;
       } catch (ex) { console.warn("Fault query error:", ex); }
       finally { checkDone(); }
     })();
 
-    // Task 4: Ozone
     layers.ozoneLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.ozone = p.ozoneP !== undefined ? Math.round(p.ozoneP) : null; results.air.ozoneRaw = p.ozone ?? null; } }
       catch (ex) { console.warn("Ozone query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 5: PM2.5
     layers.pmLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.pm = p.pmP !== undefined ? Math.round(p.pmP) : null; results.air.pmRaw = p.pm ?? null; } }
       catch (ex) { console.warn("PM2.5 query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 6: Drinking Water
     layers.drinkLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.water = p.drinkP !== undefined ? Math.round(p.drinkP) : null; results.air.waterRaw = p.drink ?? null; } }
       catch (ex) { console.warn("Drinking water query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 8: Diesel PM
     layers.dieselLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.diesel = p.dieselP !== undefined ? Math.round(p.dieselP) : null; results.air.dieselRaw = p.diesel ?? null; } }
       catch (ex) { console.warn("Diesel PM query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 9: Pesticides
     layers.pesticideLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.pesticide = p.pestP !== undefined ? Math.round(p.pestP) : null; results.air.pesticideRaw = p.pest ?? null; } }
       catch (ex) { console.warn("Pesticide query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 10: Lead Risk
     layers.leadLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.lead = p.leadP !== undefined ? Math.round(p.leadP) : null; results.air.leadRaw = p.lead ?? null; } }
       catch (ex) { console.warn("Lead risk query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 11: Asthma
     layers.asthmaLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.asthma = p.asthmaP !== undefined ? Math.round(p.asthmaP) : null; results.air.asthmaRaw = p.asthma ?? null; } }
       catch (ex) { console.warn("Asthma query error:", ex); } finally { checkDone(); }
     });
-
-    // Task 12: CES Score
     layers.cesScoreLayer.query().contains(e.latlng).run((err, fc) => {
       try { if (!err && fc.features.length > 0) { const p = fc.features[0].properties; results.air.cesScore = p.CIscoreP !== undefined ? Math.round(p.CIscoreP) : null; } }
       catch (ex) { console.warn("CES score query error:", ex); } finally { checkDone(); }
     });
 
-    // Task 7: Landslide + MMI
     (async () => {
       try {
         const [label, mmi] = await Promise.all([
@@ -1699,10 +1366,6 @@ function installClickReport(map, layers) {
     })();
   });
 }
-
-/* ============================================================================
-  12) BOOTSTRAP
-============================================================================ */
 
 (function main() {
   initAboutToggle();
@@ -1737,16 +1400,16 @@ function installClickReport(map, layers) {
     cesScoreLayer:   createCesLayer("CIscoreP IS NOT NULL",  "CIscoreP"),
     highwayLayer:    createHighwayLayer(),
     allRoadsLayer:   createAllRoadsLayer(),
-    schoolsLayer:    makeZoomGatedLayer(map, createSchoolsLayer(),      UI.ZOOM_POI_MIN),
+    schoolsLayer:    makeZoomGatedLayer(map, createSchoolsLayer(),       UI.ZOOM_POI_MIN),
     healthCenters:   makeZoomGatedLayer(map, createHealthCentersLayer(), UI.ZOOM_POI_MIN),
-    airports:        makeZoomGatedLayer(map, createAirportsLayer(),     UI.ZOOM_POI_MIN),
-    powerPlants:     makeZoomGatedLayer(map, createPowerPlantsLayer(),  UI.ZOOM_POI_MIN),
-    stateBridges:    makeZoomGatedLayer(map, createStateBridgesLayer(), UI.ZOOM_POI_MIN),
-    localBridges:    makeZoomGatedLayer(map, createLocalBridgesLayer(), UI.ZOOM_POI_MIN),
-    parks:           makeZoomGatedLayer(map, createParksLayer(),        UI.ZOOM_POI_MIN),
-    fireStations:    makeZoomGatedLayer(map, createFireStationsLayer(), UI.ZOOM_POI_MIN),
+    airports:        makeZoomGatedLayer(map, createAirportsLayer(),      UI.ZOOM_POI_MIN),
+    powerPlants:     makeZoomGatedLayer(map, createPowerPlantsLayer(),   UI.ZOOM_POI_MIN),
+    stateBridges:    makeZoomGatedLayer(map, createStateBridgesLayer(),  UI.ZOOM_POI_MIN),
+    localBridges:    makeZoomGatedLayer(map, createLocalBridgesLayer(),  UI.ZOOM_POI_MIN),
+    parks:           makeZoomGatedLayer(map, createParksLayer(),         UI.ZOOM_POI_MIN),
+    fireStations:    makeZoomGatedLayer(map, createFireStationsLayer(),  UI.ZOOM_POI_MIN),
     universitiesRaw: universities.layer,
-    universities:    makeZoomGatedLayer(map, universities.layer,        UI.ZOOM_POI_MIN),
+    universities:    makeZoomGatedLayer(map, universities.layer,         UI.ZOOM_POI_MIN),
     evChargers:      ev.layer,
   };
 
@@ -1796,15 +1459,12 @@ function installClickReport(map, layers) {
     "CES Overall Score":          LAYERS.cesScoreLayer,
   };
 
-  // Layer control at topright — styled with dark theme via CSS.
-  // The toggle button shows the hamburger icon and opens basemap + overlay selector.
   L.control.layers(
     { "OpenStreetMap": basemaps.baseOSM, "Esri Satellite": basemaps.esriSat, "Carto Light": basemaps.cartoLight, "Carto Dark": basemaps.cartoDark },
     LAYER_TOGGLES,
     { position: "topright", collapsed: true }
   ).addTo(map);
 
-  // Scale bar at bottomright above attribution
   L.control.scale({ imperial: true, position: "bottomright" }).addTo(map);
   addZoomControl(map);
   addHomeButton(map);
