@@ -505,7 +505,7 @@ html, body {
 
 /* Scale bar — bottom left, above title card */
 .leaflet-bottom.leaflet-left .leaflet-control-scale {
-  margin-bottom: 100px !important;
+  margin-bottom: 110px !important;
   margin-left: 14px !important;
 }
 
