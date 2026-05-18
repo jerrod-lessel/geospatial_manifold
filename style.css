@@ -1,6 +1,6 @@
 /* ============================================================================
    style.css - Geospatial Manifold
-   VERSION: 2026-05-18.a
+   VERSION: 2026-05-17.a
 
    Changes from 2026-05-01.a:
    - Attribution styled to match Remnant Biome / Spectral Glimpse
@@ -281,9 +281,10 @@ html, body {
   border-radius: var(--panel-radius);
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 24px rgba(0,0,0,0.5);
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 80px);
   z-index: 1000;
-  min-width: 120px;
+  min-width: 180px;
 }
 
 .basemap-opt {
@@ -302,6 +303,21 @@ html, body {
 
 .basemap-opt:hover { background: rgba(62,207,207,0.1); color: var(--panel-text); }
 .basemap-opt.active { color: var(--panel-accent); background: rgba(62,207,207,0.08); font-weight: 500; }
+
+.basemap-section-label {
+  padding: 6px 14px 3px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--panel-text-label);
+  text-transform: uppercase;
+}
+
+.basemap-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.07);
+  margin: 4px 0;
+}
 
 /* Legend toggle button — same size and style as basemap button */
 #legend-toggle-btn {
@@ -487,9 +503,10 @@ html, body {
   font-size: 10px !important;
 }
 
-/* Lift scale bar so it doesn't sit on top of attribution */
-.leaflet-bottom.leaflet-right .leaflet-control-scale {
-  margin-bottom: 14px !important;
+/* Scale bar — bottom left, above title card */
+.leaflet-bottom.leaflet-left .leaflet-control-scale {
+  margin-bottom: 100px !important;
+  margin-left: 14px !important;
 }
 
 /* ============================================================================
