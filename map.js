@@ -761,19 +761,9 @@ function addLegendControls(map, layerToggles) {
     "backdrop-filter:blur(8px)",
   ].join(";");
 
-  // Build layer toggle checkboxes
-  let layerHTML = `<h2 style="color:#e8eef2;font-size:0.85rem;margin:0 0 8px;">Layers</h2>`;
-  if (layerToggles) {
-    Object.entries(layerToggles).forEach(([name]) => {
-      layerHTML += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.78rem;color:#7a9ab0;cursor:pointer;">
-        <input type="checkbox" data-layer="${name}" style="accent-color:#3ecfcf;cursor:pointer;" />
-        ${name}
-      </label>`;
-    });
-  }
-
-  legendDiv.innerHTML = layerHTML + `
-    <div style="border-top:1px solid rgba(255,255,255,0.08);margin:10px 0 8px;"></div>
+  // Legend panel — color ramps only, layers are in the basemap dropdown
+  let layerHTML = ``;
+  legendDiv.innerHTML = `
     <h2 style="color:#e8eef2;font-size:0.85rem;margin:0 0 8px;">Legends</h2>
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Flood Hazard Zones (FEMA)</strong>
@@ -839,16 +829,6 @@ function addLegendControls(map, layerToggles) {
   `;
 
   document.body.appendChild(legendDiv);
-
-  // Wire up layer checkboxes
-  legendDiv.addEventListener("change", (e) => {
-    const checkbox = e.target;
-    if (checkbox.type !== "checkbox") return;
-    const layer = layerToggles?.[checkbox.dataset.layer];
-    if (!layer) return;
-    if (checkbox.checked) map.addLayer(layer);
-    else map.removeLayer(layer);
-  });
 
   legendDiv.addEventListener("mouseenter", () => map.scrollWheelZoom.disable());
   legendDiv.addEventListener("mouseleave", () => map.scrollWheelZoom.enable());
