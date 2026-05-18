@@ -1,8 +1,3 @@
-<!-- =========================================================
-     GEOSPATIAL MANIFOLD
-     VERSION: 2026-05-01.a
-     ========================================================= -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,72 +7,30 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-  <!-- =========================================================
-       FONTS
-       ========================================================= -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-
-  <!-- =========================================================
-       LEAFLET CORE
-       ========================================================= -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- =========================================================
-       LEAFLET-GEOMAN (OPTIONAL)
-       ========================================================= -->
   <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
   <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
-
-  <!-- =========================================================
-       ESRI LEAFLET
-       ========================================================= -->
   <script src="https://unpkg.com/esri-leaflet/dist/esri-leaflet.js"></script>
-
-  <!-- =========================================================
-       TURF.JS
-       ========================================================= -->
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-
-  <!-- =========================================================
-       GEORASTER (OPTIONAL)
-       ========================================================= -->
   <script src="https://unpkg.com/georaster"></script>
   <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
-
-  <!-- =========================================================
-       PROJ4 (OPTIONAL)
-       ========================================================= -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
-
-  <!-- =========================================================
-       CHART.JS
-       ========================================================= -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-
-  <!-- =========================================================
-       HTML2PDF
-       ========================================================= -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
   <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
 
-  <!-- =========================================================
-       FULL-VIEWPORT MAP CONTAINER
-       ========================================================= -->
   <div id="map">
-     <!-- Click instruction -->
     <div id="click-hint">Click anywhere in California to see risk data</div>
   </div>
 
-  <!-- =========================================================
-       FLOATING TITLE CARD (bottom-left, overlays the map)
-       ========================================================= -->
+  <!-- FLOATING TITLE CARD -->
   <div id="title-card">
     <div id="title-card-main">
       <img id="title-logo" src="favicon.svg" alt="Geospatial Manifold logo"
@@ -88,27 +41,38 @@
       </div>
       <button id="about-toggle" title="About this tool" aria-label="Toggle about panel">?</button>
     </div>
-
-    <!-- About panel — hidden by default, expands inside card -->
     <div id="about-panel" class="hidden">
       <p>
         Welcome to Geospatial Manifold — your tool for exploring hazard, health, and resilience
         data across California. Click anywhere on the map to get a full location report with
-        charts, environmental data, and geological risk information. Data comes from trusted sources 
+        charts, environmental data, and geological risk information. Data comes from trusted sources
         including CAL FIRE, OEHHA, the California Geological Survey, USGS, and FEMA.
       </p>
       <p>
         Built and maintained by Jerrod Lessel, against all reasonable advice.
       </p>
+      <div id="disclaimer-toggle">
+        <span id="disclaimer-icon">&#x2696;</span>
+        <span id="disclaimer-label">Legal Disclaimer</span>
+        <span id="disclaimer-chevron">&#x25BE;</span>
+      </div>
+      <div id="disclaimer-panel" class="hidden">
+        <p>
+          This tool is intended for educational and informational purposes only.
+          Not intended for professional, legal, or financial decision-making.
+          No warranty is made on the accuracy of outputs. Use at your own risk.
+        </p>
+        <p>
+          LesselGeospatial makes no warranty, express or implied, regarding the
+          accuracy, completeness, or fitness for any particular purpose of the
+          information provided.
+        </p>
+      </div>
     </div>
   </div>
 
-  <!-- =========================================================
-       SLIDE PANEL (right side, overlays the map)
-       ========================================================= -->
+  <!-- SLIDE PANEL -->
   <div id="slide-panel" class="slide-panel-closed" aria-label="Location report panel">
-
-    <!-- Panel Header -->
     <div id="panel-header">
       <div id="panel-header-left">
         <div id="panel-coords">Click the map to begin</div>
@@ -116,29 +80,21 @@
       </div>
       <button id="panel-close-btn" title="Close panel" aria-label="Close panel">&#x2715;</button>
     </div>
-
-    <!-- Loading spinner -->
     <div id="panel-spinner" class="hidden">
       <div class="panel-spinner-inner"></div>
       <span>Loading data...</span>
     </div>
-
-    <!-- Tab Bar -->
     <div id="panel-tabs" class="hidden">
       <button class="panel-tab active" data-tab="hazards">Hazards</button>
       <button class="panel-tab" data-tab="air">Environment &amp; Health</button>
       <button class="panel-tab" data-tab="geology">Geology</button>
     </div>
-
-    <!-- Scrollable Panel Body -->
     <div id="panel-body">
       <div id="panel-welcome">
         <div class="welcome-icon">&#x1F5FA;&#xFE0F;</div>
         <p>Click anywhere on the map to generate a full location report with hazard data, environmental health indicators, and geological risk information.</p>
       </div>
     </div>
-
-    <!-- Panel Footer -->
     <div id="panel-footer" class="hidden">
       <button id="export-pdf-btn">&#x2B07; Export PDF Report</button>
       <div id="donation-card">
@@ -149,7 +105,6 @@
         <a href="https://www.lesselgeospatial.com" target="_blank" rel="noopener">lesselgeospatial.com</a>
       </div>
     </div>
-
   </div>
 
   <script src="map.js"></script>
