@@ -1,6 +1,6 @@
 /* ============================================================================
    style.css - Geospatial Manifold
-   VERSION: 2026-05-17.a
+   VERSION: 2026-05-18.a
 
    Changes from 2026-05-01.a:
    - Attribution styled to match Remnant Biome / Spectral Glimpse
@@ -234,12 +234,21 @@ html, body {
   color: var(--panel-accent);
 }
 
-/* Basemap widget (top right, matching Remnant Biome) */
-#basemap-widget {
+/* Top right column — basemap + legend buttons stacked */
+#top-right-column {
   position: fixed;
   top: 14px;
   right: 14px;
   z-index: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Basemap widget sits inside the column */
+#basemap-widget {
+  position: relative;
 }
 
 #basemap-toggle {
@@ -293,6 +302,28 @@ html, body {
 
 .basemap-opt:hover { background: rgba(62,207,207,0.1); color: var(--panel-text); }
 .basemap-opt.active { color: var(--panel-accent); background: rgba(62,207,207,0.08); font-weight: 500; }
+
+/* Legend toggle button — same size and style as basemap button */
+#legend-toggle-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 8px;
+  color: var(--ctrl-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: background 0.15s, color 0.15s;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.5);
+}
+
+#legend-toggle-btn:hover {
+  background: var(--ctrl-hover);
+  color: var(--panel-accent);
+}
 
 .leaflet-control-zoom a {
   background: var(--ctrl-bg) !important;
@@ -458,7 +489,7 @@ html, body {
 
 /* Lift scale bar so it doesn't sit on top of attribution */
 .leaflet-bottom.leaflet-right .leaflet-control-scale {
-  margin-bottom: 24px !important;
+  margin-bottom: 14px !important;
 }
 
 /* ============================================================================
