@@ -1,6 +1,6 @@
 /* ============================================================================
   map.js - Geospatial Manifold (Leaflet + Esri Leaflet)
-  VERSION: 2026-05-17.a
+  VERSION: 2026-05-18.a
 
   Changes from 2026-05-01.b:
   - Legal disclaimer toggle added to initAboutToggle
@@ -733,47 +733,54 @@ function addHomeButton(map) {
   // Handled by HTML button above — no-op kept for compatibility
 }
 
-function addLegendControls(map) {
-  const LegendToggleControl = L.Control.extend({
-    options: { position: "topright" },
-    onAdd: function () {
-      const c = L.DomUtil.create("div", "leaflet-bar custom-legend-button");
-      c.innerHTML = `<span class="legend-icon" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="6"  x2="21" y2="6"></line>
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-      </span>`;
-      c.title = "Toggle Legend";
-      c.onclick = function () {
-        const panel = document.getElementById("gm-legend-panel");
-        if (panel) panel.style.display = panel.style.display === "none" ? "block" : "none";
-      };
-      L.DomEvent.disableClickPropagation(c);
-      return c;
-    },
+function addLegendControls(map, layerToggles) {
+  // Legend toggle wired to HTML button in index.html
+  document.getElementById("legend-toggle-btn").addEventListener("click", () => {
+    const panel = document.getElementById("gm-legend-panel");
+    if (panel) panel.style.display = panel.style.display === "none" ? "block" : "none";
   });
-  map.addControl(new LegendToggleControl());
 
   const legendDiv = document.createElement("div");
   legendDiv.id = "gm-legend-panel";
   legendDiv.style.cssText = [
-    "display:none","position:absolute","top:10px","right:56px","z-index:800",
-    "max-height:70vh","width:250px","overflow-y:auto",
-    "background:rgba(13,25,38,0.95)","border:1px solid rgba(255,255,255,0.1)",
-    "border-radius:8px","padding:10px","font-size:0.82rem","color:#7a9ab0",
-    "box-shadow:0 2px 12px rgba(0,0,0,0.5)","backdrop-filter:blur(8px)",
+    "display:none",
+    "position:fixed",
+    "top:60px",
+    "right:14px",
+    "z-index:800",
+    "max-height:70vh",
+    "width:250px",
+    "overflow-y:auto",
+    "background:rgba(13,25,38,0.95)",
+    "border:1px solid rgba(255,255,255,0.1)",
+    "border-radius:8px",
+    "padding:10px",
+    "font-size:0.82rem",
+    "color:#7a9ab0",
+    "box-shadow:0 2px 12px rgba(0,0,0,0.5)",
+    "backdrop-filter:blur(8px)",
   ].join(";");
 
-  legendDiv.innerHTML = `
+  // Build layer toggle checkboxes
+  let layerHTML = `<h2 style="color:#e8eef2;font-size:0.85rem;margin:0 0 8px;">Layers</h2>`;
+  if (layerToggles) {
+    Object.entries(layerToggles).forEach(([name]) => {
+      layerHTML += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.78rem;color:#7a9ab0;cursor:pointer;">
+        <input type="checkbox" data-layer="${name}" style="accent-color:#3ecfcf;cursor:pointer;" />
+        ${name}
+      </label>`;
+    });
+  }
+
+  legendDiv.innerHTML = layerHTML + `
+    <div style="border-top:1px solid rgba(255,255,255,0.08);margin:10px 0 8px;"></div>
     <h2 style="color:#e8eef2;font-size:0.85rem;margin:0 0 8px;">Legends</h2>
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Flood Hazard Zones (FEMA)</strong>
-      <div style="display:block;margin-top:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#feb24c;margin-right:6px;vertical-align:middle;"></span><em> 0.2% Annual Chance Flood Hazard</em></div>
-      <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#f03b20;margin-right:6px;vertical-align:middle;"></span><em> 1% Annual Chance Flood Hazard</em></div>
+      <div style="display:block;margin-top:6px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#feb24c;margin-right:6px;vertical-align:middle;"></span><em> 0.2% Annual Chance</em></div>
+      <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#f03b20;margin-right:6px;vertical-align:middle;"></span><em> 1% Annual Chance</em></div>
       <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#769ccd;margin-right:6px;vertical-align:middle;"></span><em> Regulatory Floodway</em></div>
-      <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#e5d099;margin-right:6px;vertical-align:middle;"></span><em> Reduced Risk Due to Levee</em></div>
+      <div style="display:block;margin-top:4px;"><span style="display:inline-block;width:12px;height:12px;border-radius:2px;border:1px solid rgba(255,255,255,0.15);background:#e5d099;margin-right:6px;vertical-align:middle;"></span><em> Reduced Risk (Levee)</em></div>
     </div>
     <div style="margin-bottom:10px;">
       <strong style="color:#e8eef2;font-size:0.78rem;">Fire Hazard Severity Zones</strong>
@@ -831,7 +838,18 @@ function addLegendControls(map) {
     </div>
   `;
 
-  map.getContainer().appendChild(legendDiv);
+  document.body.appendChild(legendDiv);
+
+  // Wire up layer checkboxes
+  legendDiv.addEventListener("change", (e) => {
+    const checkbox = e.target;
+    if (checkbox.type !== "checkbox") return;
+    const layer = layerToggles?.[checkbox.dataset.layer];
+    if (!layer) return;
+    if (checkbox.checked) map.addLayer(layer);
+    else map.removeLayer(layer);
+  });
+
   legendDiv.addEventListener("mouseenter", () => map.scrollWheelZoom.disable());
   legendDiv.addEventListener("mouseleave", () => map.scrollWheelZoom.enable());
   legendDiv.addEventListener("wheel",      (e) => e.stopPropagation(), { passive: false });
@@ -1476,17 +1494,12 @@ function installClickReport(map, layers) {
     document.getElementById("basemap-dropdown")?.classList.add("hidden");
   });
 
-  // Layer toggles (overlays only, no basemap picker)
-  L.control.layers(
-    {},
-    LAYER_TOGGLES,
-    { position: "topright", collapsed: true }
-  ).addTo(map);
-
+  // Layer toggles now live inside the legend panel (added via addLegendControls)
+  // Pass LAYER_TOGGLES so it can wire up checkboxes
   L.control.scale({ imperial: true, position: "bottomright" }).addTo(map);
   addZoomControl(map);
   addHomeButton(map);
-  addLegendControls(map);
+  addLegendControls(map, LAYER_TOGGLES);
 
   LAYERS.universitiesRaw.metadata((err, md) => {
     if (err) console.warn("Colleges metadata error:", err);
