@@ -37,7 +37,7 @@
     <button id="home-btn" title="Reset view" aria-label="Reset view">&#x2302;</button>
   </div>
 
-  <!-- TOP RIGHT: BASEMAP + LEGEND buttons stacked -->
+  <!-- TOP RIGHT: BASEMAP + LAYERS + LEGEND -->
   <div id="top-right-column">
     <div id="basemap-widget">
       <button id="basemap-toggle" title="Switch basemap" aria-label="Switch basemap">
@@ -48,13 +48,17 @@
         </svg>
       </button>
       <div id="basemap-dropdown" class="hidden">
+        <div class="basemap-section-label">BASEMAP</div>
         <button class="basemap-opt active" data-basemap="carto-light">Light</button>
         <button class="basemap-opt" data-basemap="carto-dark">Dark</button>
         <button class="basemap-opt" data-basemap="esri-satellite">Satellite</button>
         <button class="basemap-opt" data-basemap="osm">Streets</button>
+        <div class="basemap-divider"></div>
+        <div class="basemap-section-label">LAYERS</div>
+        <div id="layer-toggles-list"></div>
       </div>
     </div>
-    <button id="legend-toggle-btn" title="Toggle layers &amp; legend" aria-label="Toggle layers and legend">
+    <button id="legend-toggle-btn" title="Toggle legend" aria-label="Toggle legend">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="3" y1="6"  x2="21" y2="6"></line>
         <line x1="3" y1="12" x2="21" y2="12"></line>
