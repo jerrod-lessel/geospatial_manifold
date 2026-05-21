@@ -1,12 +1,13 @@
 /* ============================================================================
   map.js - Geospatial Manifold (Leaflet + Esri Leaflet)
-  VERSION: 2026-05-18.a
+  VERSION: 2026-05-20.a
 
-  Changes from 2026-05-17.a:
-  - Layer checkbox events now fire map overlayadd/overlayremove so zoom-gating
-    and road zoom-switching work correctly
-  - All dash-card-explain wording restored in _renderHazards, _renderAir,
-    _renderGeology (was stripped in 2026-05-17.a)
+  Changes from 2026-05-18.a:
+  - LANDSLIDE_MAPSERVER_ROOT added for dynamicMapLayer visual rendering
+  - identifyLandslideAt: removed .layers("visible:0") — caused 400 Invalid URL
+    on a /MapServer/0 endpoint (layer already specified in URL)
+  - identifyMMIAt: replaced L.esri.imageService().identify() with direct fetch()
+    to avoid Esri Leaflet ImageServer identify quirks that reject valid responses
 ============================================================================ */
 
 window.addEventListener("error", (e) => {
@@ -221,10 +222,12 @@ function parseLandslideLabelFromIdentify(rawResponse, featureCollection) {
   return null;
 }
 
+// FIX: removed .layers("visible:0") — caused 400 Invalid URL on a /MapServer/0
+// endpoint because the layer is already specified in the URL itself.
 function identifyLandslideAt(map, latlng, { tolerance = 8 } = {}) {
   return new Promise((resolve, reject) => {
     L.esri.identifyFeatures({ url: SERVICES.LANDSLIDE_MAPSERVER })
-      .on(map).at(latlng).tolerance(tolerance).layers("visible:0").returnGeometry(false)
+      .on(map).at(latlng).tolerance(tolerance).returnGeometry(false)
       .run((error, featureCollection, rawResponse) => {
         if (error) return reject(error);
         resolve(parseLandslideLabelFromIdentify(rawResponse, featureCollection));
@@ -251,17 +254,34 @@ function formatMMI(mmi) {
   return { label: `${meta.roman} - ${meta.desc}`, intClass, valueStr: mmi.toFixed(1) };
 }
 
+// FIX: replaced L.esri.imageService().identify() with a direct fetch() call.
+// Esri Leaflet's imageService identify has quirks with certain ImageServer endpoints
+// that cause it to throw a 400 error in the callback even when the network request
+// returns 200 OK. The raw REST API works fine when called directly.
 function identifyMMIAt(latlng) {
   return new Promise((resolve) => {
-    L.esri.imageService({ url: SERVICES.SHAKING_IMAGESERVER })
-      .identify().at(latlng).returnGeometry(false)
-      .run((err, res, raw) => {
-        if (err) { console.warn("MMI identify error:", err); resolve(null); return; }
+    const params = new URLSearchParams({
+      geometry: JSON.stringify({ x: latlng.lng, y: latlng.lat, spatialReference: { wkid: 4326 } }),
+      geometryType: "esriGeometryPoint",
+      returnGeometry: "false",
+      returnCatalogItems: "false",
+      f: "json",
+    });
+    fetch(`${SERVICES.SHAKING_IMAGESERVER}/identify?${params.toString()}`)
+      .then((r) => r.json())
+      .then((raw) => {
         let val = null;
-        if (raw?.pixel && typeof raw.pixel.value !== "undefined") val = Number(raw.pixel.value);
-        else if (typeof raw?.value !== "undefined") val = Number(raw.value);
-        else if (typeof res?.value !== "undefined") val = Number(res.value);
+        // ImageServer identify returns the pixel value at raw.value (a string e.g. "6.123")
+        if (raw?.value !== undefined && raw.value !== null && raw.value !== "NoData") {
+          val = Number(raw.value);
+        } else if (raw?.pixel?.value !== undefined) {
+          val = Number(raw.pixel.value);
+        }
         resolve(Number.isFinite(val) ? val : null);
+      })
+      .catch((err) => {
+        console.warn("MMI identify fetch error:", err);
+        resolve(null);
       });
   });
 }
@@ -328,6 +348,8 @@ function createCesLayer(whereClause, pctField) {
   });
 }
 
+// FIX: uses LANDSLIDE_MAPSERVER_ROOT (no /0) — dynamicMapLayer requires the
+// root MapServer URL, not a specific layer endpoint.
 function createLandslideVisualLayer() {
   return L.esri.dynamicMapLayer({ url: SERVICES.LANDSLIDE_MAPSERVER_ROOT, opacity: 0.6 });
 }
@@ -1657,7 +1679,6 @@ function installClickReport(map, layers) {
     "CES Overall Score":          LAYERS.cesScoreLayer,
   };
 
-  // Basemap widget
   const BASEMAP_TILES = {
     "carto-light":    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     "carto-dark":     "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
@@ -1685,8 +1706,6 @@ function installClickReport(map, layers) {
     });
   });
 
-  // Build layer checkboxes — fire overlayadd/overlayremove so zoom-gating
-  // and road zoom-switching listeners receive the correct events
   const layerList = document.getElementById("layer-toggles-list");
   Object.entries(LAYER_TOGGLES).forEach(([name, layer]) => {
     const label = document.createElement("label");
