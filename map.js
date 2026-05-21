@@ -21,6 +21,8 @@ const DEFAULT_VIEW = { lat: 37.5, lng: -119.5, zoom: 6 };
 const SERVICES = {
   LANDSLIDE_MAPSERVER:
     "https://gis.conservation.ca.gov/server/rest/services/CGS/MS58_LandslideSusceptibility_Classes/MapServer/0",
+  LANDSLIDE_MAPSERVER_ROOT:
+    "https://gis.conservation.ca.gov/server/rest/services/CGS/MS58_LandslideSusceptibility_Classes/MapServer",
   SHAKING_IMAGESERVER:
     "https://gis.conservation.ca.gov/server/rest/services/CGS/MS48_MMI_PGV_10pc50/ImageServer",
   FAULTS_REGIONAL_QUAT: "https://gis.conservation.ca.gov/server/rest/services/CGS/FaultActivityMapCA/MapServer/17",
@@ -327,7 +329,7 @@ function createCesLayer(whereClause, pctField) {
 }
 
 function createLandslideVisualLayer() {
-  return L.esri.dynamicMapLayer({ url: SERVICES.LANDSLIDE_MAPSERVER, opacity: 0.6 });
+  return L.esri.dynamicMapLayer({ url: SERVICES.LANDSLIDE_MAPSERVER_ROOT, opacity: 0.6 });
 }
 
 function createFaultsInteractiveLayer(map) {
