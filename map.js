@@ -3,11 +3,10 @@
   VERSION: 2026-05-20.a
 
   Changes from 2026-05-18.a:
-  - LANDSLIDE_MAPSERVER_ROOT added for dynamicMapLayer visual rendering
-  - identifyLandslideAt: removed .layers("visible:0") — caused 400 Invalid URL
-    on a /MapServer/0 endpoint (layer already specified in URL)
-  - identifyMMIAt: replaced L.esri.imageService().identify() with direct fetch()
-    to avoid Esri Leaflet ImageServer identify quirks that reject valid responses
+  - LANDSLIDE_MAPSERVER URL corrected: removed trailing /0 (was causing 400 errors
+    in identifyLandslideAt because .layers("visible:0") is only valid on root URLs)
+  - LANDSLIDE_MAPSERVER_ROOT removed (redundant — both now point to root MapServer)
+  - All other code unchanged from 2026-05-18.a
 ============================================================================ */
 
 window.addEventListener("error", (e) => {
@@ -21,8 +20,6 @@ const DEFAULT_VIEW = { lat: 37.5, lng: -119.5, zoom: 6 };
 
 const SERVICES = {
   LANDSLIDE_MAPSERVER:
-    "https://gis.conservation.ca.gov/server/rest/services/CGS/MS58_LandslideSusceptibility_Classes/MapServer/0",
-  LANDSLIDE_MAPSERVER_ROOT:
     "https://gis.conservation.ca.gov/server/rest/services/CGS/MS58_LandslideSusceptibility_Classes/MapServer",
   SHAKING_IMAGESERVER:
     "https://gis.conservation.ca.gov/server/rest/services/CGS/MS48_MMI_PGV_10pc50/ImageServer",
@@ -222,12 +219,10 @@ function parseLandslideLabelFromIdentify(rawResponse, featureCollection) {
   return null;
 }
 
-// FIX: removed .layers("visible:0") — caused 400 Invalid URL on a /MapServer/0
-// endpoint because the layer is already specified in the URL itself.
 function identifyLandslideAt(map, latlng, { tolerance = 8 } = {}) {
   return new Promise((resolve, reject) => {
     L.esri.identifyFeatures({ url: SERVICES.LANDSLIDE_MAPSERVER })
-      .on(map).at(latlng).tolerance(tolerance).returnGeometry(false)
+      .on(map).at(latlng).tolerance(tolerance).layers("visible:0").returnGeometry(false)
       .run((error, featureCollection, rawResponse) => {
         if (error) return reject(error);
         resolve(parseLandslideLabelFromIdentify(rawResponse, featureCollection));
@@ -254,34 +249,17 @@ function formatMMI(mmi) {
   return { label: `${meta.roman} - ${meta.desc}`, intClass, valueStr: mmi.toFixed(1) };
 }
 
-// FIX: replaced L.esri.imageService().identify() with a direct fetch() call.
-// Esri Leaflet's imageService identify has quirks with certain ImageServer endpoints
-// that cause it to throw a 400 error in the callback even when the network request
-// returns 200 OK. The raw REST API works fine when called directly.
 function identifyMMIAt(latlng) {
   return new Promise((resolve) => {
-    const params = new URLSearchParams({
-      geometry: JSON.stringify({ x: latlng.lng, y: latlng.lat, spatialReference: { wkid: 4326 } }),
-      geometryType: "esriGeometryPoint",
-      returnGeometry: "false",
-      returnCatalogItems: "false",
-      f: "json",
-    });
-    fetch(`${SERVICES.SHAKING_IMAGESERVER}/identify?${params.toString()}`)
-      .then((r) => r.json())
-      .then((raw) => {
+    L.esri.imageService({ url: SERVICES.SHAKING_IMAGESERVER })
+      .identify().at(latlng).returnGeometry(false)
+      .run((err, res, raw) => {
+        if (err) { console.warn("MMI identify error:", err); resolve(null); return; }
         let val = null;
-        // ImageServer identify returns the pixel value at raw.value (a string e.g. "6.123")
-        if (raw?.value !== undefined && raw.value !== null && raw.value !== "NoData") {
-          val = Number(raw.value);
-        } else if (raw?.pixel?.value !== undefined) {
-          val = Number(raw.pixel.value);
-        }
+        if (raw?.pixel && typeof raw.pixel.value !== "undefined") val = Number(raw.pixel.value);
+        else if (typeof raw?.value !== "undefined") val = Number(raw.value);
+        else if (typeof res?.value !== "undefined") val = Number(res.value);
         resolve(Number.isFinite(val) ? val : null);
-      })
-      .catch((err) => {
-        console.warn("MMI identify fetch error:", err);
-        resolve(null);
       });
   });
 }
@@ -348,10 +326,8 @@ function createCesLayer(whereClause, pctField) {
   });
 }
 
-// FIX: uses LANDSLIDE_MAPSERVER_ROOT (no /0) — dynamicMapLayer requires the
-// root MapServer URL, not a specific layer endpoint.
 function createLandslideVisualLayer() {
-  return L.esri.dynamicMapLayer({ url: SERVICES.LANDSLIDE_MAPSERVER_ROOT, opacity: 0.6 });
+  return L.esri.dynamicMapLayer({ url: SERVICES.LANDSLIDE_MAPSERVER, opacity: 0.6 });
 }
 
 function createFaultsInteractiveLayer(map) {
