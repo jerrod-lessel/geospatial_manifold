@@ -1555,7 +1555,7 @@ function installClickReport(map, layers) {
         ]);
         results.geo.landslide = label ?? null;
         results.geo.mmi       = mmi   ?? null;
-      } catch (ex) { console.warn("Geology identify error:", ex); }
+      } catch (ex) { console.warn("Geology identify error:", JSON.stringify(ex), ex); }
       finally { checkDone(); }
     })();
   });
