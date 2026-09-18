@@ -99,11 +99,11 @@ function createBasemaps() {
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { attribution: "Tiles © Esri" }
   );
-  const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: "© Carto",
+  const cartoLight = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_3p6q_1_f0f4790f163e4e1e3f530c01", {
+    attribution: "© Carto © OpenStreetMap contributors",
   });
-  const cartoDark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: "© Carto",
+  const cartoDark = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_3p6q_1_f0f4790f163e4e1e3f530c01", {
+    attribution: "© Carto © OpenStreetMap contributors",
   });
   return { baseOSM, esriSat, cartoLight, cartoDark };
 }
@@ -1656,8 +1656,8 @@ function installClickReport(map, layers) {
   };
 
   const BASEMAP_TILES = {
-    "carto-light":    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    "carto-dark":     "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    "carto-light":    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_3p6q_1_f0f4790f163e4e1e3f530c01",
+    "carto-dark":     "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_3p6q_1_f0f4790f163e4e1e3f530c01",
     "esri-satellite": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     "osm":            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
   };
